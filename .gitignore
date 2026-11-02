@@ -56,3 +56,4 @@ insight/bt-*.jsonl
 .hammer.log
 eval_results/.etl-watch-state.json
 /sch*.log
+.mcp.json
