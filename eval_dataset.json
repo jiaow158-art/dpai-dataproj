@@ -2738,44 +2738,44 @@
       "domain": "sales-performance",
       "pattern": "cost_margin_trend",
       "question": "瓷砖事业部2026年1-5月成本与毛利趋势",
-      "sql": "SELECT calmonth, SUM(ambperformance) AS actual, SUM(actual_cost_exclude_logistics) AS cost_ex_log, SUM(gross_profit_after_sharing) AS gross_profit, SUM(gross_profit_after_sharing)/NULLIF(SUM(ambperformance),0)*100 AS margin_pct FROM dm.dm_fin_operations_mix_sum_t WHERE calmonth BETWEEN '2026-01' AND '2026-05' AND node_desc2 = '瓷砖事业部' AND data_source IN ('S','T','D','') GROUP BY calmonth ORDER BY calmonth",
+      "sql": "SELECT calmonth, SUM(ambperformance) AS actual, SUM(actual_cost_exclude_logistics) AS cost_ex_log, SUM(gross_profit_after_sharing) AS gross_profit, SUM(gross_profit_after_sharing)/NULLIF(SUM(notax_sales_net_amt),0)*100 AS margin_pct FROM dm.dm_fin_operations_mix_sum_t WHERE calmonth BETWEEN '2026-01' AND '2026-05' AND node_desc2 = '瓷砖事业部' AND data_source IN ('S','T','D','') GROUP BY calmonth ORDER BY calmonth",
       "row_count": 5,
-      "elapsed_ms": 6129,
+      "elapsed_ms": 1051,
       "data": [
         {
           "calmonth": "2026-01",
           "actual": "235326388.2424600000",
-          "cost_ex_log": "166843071.9067800000",
-          "gross_profit": "61747361.7244750000",
-          "margin_pct": "26.23903004913152695100"
+          "cost_ex_log": "166838203.3561380000",
+          "gross_profit": "61749986.5885630000",
+          "margin_pct": "27.18221161182616086600"
         },
         {
           "calmonth": "2026-02",
           "actual": "45844138.7265000000",
-          "cost_ex_log": "34112805.2888780000",
-          "gross_profit": "11047088.2935030000",
-          "margin_pct": "24.09705711652355650900"
+          "cost_ex_log": "34112802.7090470000",
+          "gross_profit": "11047094.9834180000",
+          "margin_pct": "25.39920097941920523900"
         },
         {
           "calmonth": "2026-03",
           "actual": "427430907.2870940000",
-          "cost_ex_log": "297570767.4088470000",
-          "gross_profit": "100803149.9114900000",
-          "margin_pct": "23.58349576339438614200"
+          "cost_ex_log": "297568385.3405690000",
+          "gross_profit": "100804570.9134230000",
+          "margin_pct": "25.93431215283009722600"
         },
         {
           "calmonth": "2026-04",
           "actual": "472816360.5523800000",
-          "cost_ex_log": "317488474.1968980000",
-          "gross_profit": "110333122.4948930000",
-          "margin_pct": "23.33530133474938610100"
+          "cost_ex_log": "317487855.0067740000",
+          "gross_profit": "110333666.2523470000",
+          "margin_pct": "26.11474216916448189100"
         },
         {
           "calmonth": "2026-05",
           "actual": "505206331.1828240000",
-          "cost_ex_log": "334080608.4267700000",
-          "gross_profit": "131457727.8220540000",
-          "margin_pct": "26.02060182307614330400"
+          "cost_ex_log": "334079797.7204430000",
+          "gross_profit": "131458133.1752200000",
+          "margin_pct": "28.92693684246658144600"
         }
       ],
       "checksum": "rows=5"
@@ -2848,30 +2848,30 @@
       "domain": "sku-profitability",
       "pattern": "sku_margin_quadrant",
       "question": "2026年5-7月SKU毛利率与销售增长率四象限数据（销售额TOP30）",
-      "sql": "WITH cur AS (\n  SELECT material_num, SUM(ambperformance) AS amt, SUM(gross_profit_after_sharing) AS gp\n  FROM dm.dm_fin_operations_mix_sum_t\n  WHERE calmonth BETWEEN '2026-05' AND '2026-07' AND data_source IN ('S','T','D','')\n  GROUP BY material_num\n), prev AS (\n  SELECT material_num, SUM(ambperformance) AS amt\n  FROM dm.dm_fin_operations_mix_sum_t\n  WHERE calmonth BETWEEN '2026-02' AND '2026-04' AND data_source IN ('S','T','D','')\n  GROUP BY material_num\n)\nSELECT c.material_num, ROUND(c.amt) AS amt,\n       ROUND(100.0*c.gp/NULLIF(c.amt,0),1) AS gp_rate,\n       ROUND(100.0*(c.amt-p.amt)/NULLIF(p.amt,0),1) AS growth_pct\nFROM cur c JOIN prev p USING (material_num)\nORDER BY c.amt DESC LIMIT 30;",
+      "sql": "WITH cur AS (\n  SELECT material_num, SUM(ambperformance) AS amt, SUM(gross_profit_after_sharing) AS gp, SUM(notax_sales_net_amt) AS ntx\n  FROM dm.dm_fin_operations_mix_sum_t\n  WHERE calmonth BETWEEN '2026-05' AND '2026-07' AND data_source IN ('S','T','D','')\n  GROUP BY material_num\n), prev AS (\n  SELECT material_num, SUM(ambperformance) AS amt\n  FROM dm.dm_fin_operations_mix_sum_t\n  WHERE calmonth BETWEEN '2026-02' AND '2026-04' AND data_source IN ('S','T','D','')\n  GROUP BY material_num\n)\nSELECT c.material_num, ROUND(c.amt) AS amt,\n       ROUND(100.0*c.gp/NULLIF(c.ntx,0),1) AS gp_rate,\n       ROUND(100.0*(c.amt-p.amt)/NULLIF(p.amt,0),1) AS growth_pct\nFROM cur c JOIN prev p USING (material_num)\nORDER BY c.amt DESC LIMIT 30;",
       "row_count": 30,
-      "elapsed_ms": 5312,
+      "elapsed_ms": 561,
       "data": [
         {
           "material_num": "FG802702_A",
           "amt": "18747147",
-          "gp_rate": "29.9",
+          "gp_rate": "34.3",
           "growth_pct": "104.6"
         },
         {
           "material_num": "T09YV152500_A",
           "amt": "17701712",
-          "gp_rate": "43.9",
+          "gp_rate": "51.1",
           "growth_pct": "47.1"
         },
         {
           "material_num": "YV272500_A",
           "amt": "16566982",
-          "gp_rate": "42.7",
+          "gp_rate": "49.4",
           "growth_pct": "87.2"
         }
       ],
-      "checksum": "f031d6ab7fc3c59f40975fcf05dab572"
+      "checksum": "97f3544384c8168bf9b8811acc4920a2"
     },
     {
       "domain": "sku-profitability",
@@ -2946,30 +2946,30 @@
       "domain": "sku-profitability",
       "pattern": "sku_channel_pivot",
       "question": "物料FG802702_A 2026年1-7月各整合渠道的销售额与毛利率？",
-      "sql": "SELECT integrate_channel__t AS channel,\n       ROUND(SUM(ambperformance)) AS amt,\n       ROUND(SUM(gross_profit_after_sharing)) AS gp,\n       ROUND(100.0*SUM(gross_profit_after_sharing)/NULLIF(SUM(ambperformance),0),1) AS gp_rate\nFROM dm.dm_fin_operations_mix_sum_t\nWHERE material_num = 'FG802702_A' AND calmonth BETWEEN '2026-01' AND '2026-07'\n  AND data_source IN ('S','T','D','')\nGROUP BY integrate_channel__t ORDER BY amt DESC;",
+      "sql": "SELECT integrate_channel__t AS channel,\n       ROUND(SUM(ambperformance)) AS amt,\n       ROUND(SUM(gross_profit_after_sharing)) AS gp,\n       ROUND(100.0*SUM(gross_profit_after_sharing)/NULLIF(SUM(notax_sales_net_amt),0),1) AS gp_rate\nFROM dm.dm_fin_operations_mix_sum_t\nWHERE material_num = 'FG802702_A' AND calmonth BETWEEN '2026-01' AND '2026-07'\n  AND data_source IN ('S','T','D','')\nGROUP BY integrate_channel__t ORDER BY amt DESC;",
       "row_count": 4,
-      "elapsed_ms": 5372,
+      "elapsed_ms": 653,
       "data": [
         {
           "channel": "零售渠道",
           "amt": "25983764",
           "gp": "7818941",
-          "gp_rate": "30.1"
+          "gp_rate": "33.9"
         },
         {
           "channel": "工程渠道",
           "amt": "2126117",
           "gp": "445281",
-          "gp_rate": "20.9"
+          "gp_rate": "23.6"
         },
         {
           "channel": "整装渠道",
           "amt": "387946",
           "gp": "156025",
-          "gp_rate": "40.2"
+          "gp_rate": "44.4"
         }
       ],
-      "checksum": "a1c2df14a3453929fa73d034d6165e8d"
+      "checksum": "04d7d1385f2d75c47fa802063d275b7e"
     },
     {
       "domain": "sku-profitability",
