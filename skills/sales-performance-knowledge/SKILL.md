@@ -22,9 +22,11 @@ description: 销售业绩领域数据知识库。当用户询问销售达成率�
 | 文档 | 对应问题类型 |
 |---|---|
 | [operations-mix-sum.md](references/operations-mix-sum.md) | **主事实表**（默认首选）。月度达成、渠道/品牌/客户/区域下钻、预算vs实际、不含税净额、销售面积。内置 node_desc 无需 JOIN 组织表 |
+| [operations-mix.md](references/operations-mix.md) | **毛利以上合并底表**（2741万行中间层，mix_sum 的直系上游 = 业绩表 ∪ 收入成本表 ∪ 其他收支）。独有 `infoprov` 可按来源切分指标；独有 `comp_code`/`salesorg`/`batch`/`stor_loc`/`val_type`/`bus_area`/`trading_mode`/`act_cost_profit_amt`。⚠️ 无单据号、无 node_desc；**下钻时必须自补 `comp_code<>'8000'` + `cust_group<>'Z0'`**（mix_sum 内置、本层没有） |
 | [sales-performance.md](references/sales-performance.md) | 同比增长（唯一有 `last_year_*` 字段）、产品分类达成（高值/大规格/套餐等预计算列） |
 | [sales-target.md](references/sales-target.md) | 目标销售额、目标完成进度、目标vs实际偏差 |
 | [dm-so-org-perf-stat.md](references/dm-so-org-perf-stat.md) | **轻量汇总表**（业绩宽表上游）。阿米巴业绩+利润合并、毛利计算、费用明细 |
+| [ambv2-profit.md](references/ambv2-profit.md) | **收入成本底表**（4600~5100万行明细，列存）。单据/凭证/SKU级收入成本毛利下钻、毛利三口径、1+N/跨事业部分成、内部结算价。⚠️ 无 node_desc，组织用 `sales_division_1n_code`；`data_source` **按指标族判定**（总额取 S；分成 S=卖出方/D=供货方；集团利润表口径 `IN ('S','T')`，上市口径不过滤）；`bus_area` 影响成本调整值是否计入；问"上市口径/卫浴阿米巴利润"改走下游汇总表 |
 | [ct-dept-sales-performance.md](references/ct-dept-sales-performance.md) | **瓷砖部门业绩日报**（58列）。6级组织×4渠道, 含715/超大板/918/高值产品分类, 6种排名 |
 | [region-performance-daily.md](references/region-performance-daily.md) | **区域业绩日报**（25列）。部门日报简化版, 含季/年目标 |
 | [sw-business-center-daily.md](references/sw-business-center-daily.md) | **卫浴商用中心双计业绩**（13列）。大区×业务类型(直营KA/工程经销商/运营中心) |
@@ -77,3 +79,4 @@ description: 销售业绩领域数据知识库。当用户询问销售达成率�
 - Mix 表 `data_source` 按组织层级选择：集团/node_desc2 → `IN ('S','T','D','')`，其他层级 → `IN ('','S','T','D','U')`，未指定组织时询问用户
 - 大表必须带时间范围过滤（Mix 表 903万行，业绩表 892万行）
 - 备份表/临时表（`_bak`、`_tmp`、`_wjh_` 后缀）绝对不能使用
+- **从 mix_sum 下钻到下层表时必须补过滤**：`AND coalesce(comp_code,'#') <> '8000' AND coalesce(cust_group,'#') <> 'Z0'`。这两条是 `dm_fin_operations_mix_sum_t` ETL L173 **内置**的，但 `dm_fin_operations_mix_t` / `dm_ambv2_profit_t` / `dm_ambv2_zzt_xssr_t` 三层都没有——不补则与 mix_sum 对不上账

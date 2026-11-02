@@ -23,15 +23,18 @@ DWR 层 (数据仓库 — **业绩域DWR层脚本几乎缺失**)
   ├── DWROTD.DWR_SO_ORG_EXT_OSS_F ← DWI_SO_ORG_EXT_OSS_T (OSS客户DWR版)
   ├── DWRFIN.DWRFIN_COST_SALES_GROSS_PROFIT_D — 销售毛利宽表 (脚本在fin-cost域)
   ├── DWRFIN.DWR_FIN_COST_D_COMPRE_SUBJ_T — 费用明细 (跨域引用, 含科目0054010600/0054010700)
-  └── **缺失**: DM_ZZT_XSSR_T / DM_AMBV2_ZZT_XSSR_T / DM_AMBV2_PROFIT_T 等关键上游DWR表脚本未归档
+  ├── DWRFIN/DM_CT PJob_DM_ZZT_XSSR_T (+_01收入/_02) — 收入成本底表·汇总表 (HiveSQL, 已归档)
+  ├── DM_CT PJob_DWS_DM_AMBV2_ZZT_XSSR_T — 1+N业绩底表 (已归档)
+  ├── DWR/FIN/COST PJob_DM_AMBV2_PROFIT_T — 阿米巴收入成本底表 (HiveSQL, 已归档, 见 ambv2-profit.md)
+  └── **仍缺失**: DM_ZZT_XSSR_QT_T / DM_RPT_GROUP_ACHIEVEMENT_AMB_T 等上游表脚本
     ↓
 DM 层 (数据集市 — 10个脚本)
-  ├── DM.DM_FIN_OPERATIONS_MIX_T — **经营混合中间表** (脚本未归档, 核心上游!)
-  │     ← DM.DM_AMBV2_ZZT_XSSR_T (阿米巴销售输入)
-  │     ← DM.DM_AMBV2_PROFIT_T (阿米巴利润)
-  │     ← DM.DM_ZZT_XSSR_QT_T (其他收支)
-  │     ← DM.DM_ZZT_XSSR_T (销售输入事实)
-  │     ← DM.DM_RPT_GROUP_ACHIEVEMENT_AMB_T (阿米巴达成)
+  ├── DM.DM_FIN_OPERATIONS_MIX_T — **经营混合中间表 = 毛利以上合并底表** (2741万行, 脚本已归档, 详见 [operations-mix.md](operations-mix.md))
+  │     ← UNION ALL 三张源表，用 infoprov 字段标记来源（ETL 实证）:
+  │     ← DM.DM_AMBV2_PROFIT_T   → infoprov='dm_ambv2_profit_t'   (收入成本表, 详见 [ambv2-profit.md](ambv2-profit.md))
+  │     ← DM.DM_AMBV2_ZZT_XSSR_T → infoprov='dm_ambv2_zzt_xssr_t' (阿米巴业绩表, 815万行)
+  │     ← DM.DM_ZZT_XSSR_QT_T    → infoprov='dm_zzt_xssr_qt_t'    (其他收支, 脚本仍未归档)
+  │     ⚠️ 历史文档记 5 张来源表，当前归档脚本仅见 3 个 UNION 块
   ├── DM.DM_FIN_OPERATIONS_MIX_SUM_T — **经营混合汇总 (主事实表)** (903万行, 详见下方映射)
   ├── DM.CT_SALES_PERFORMANCE_T — 销售业绩宽表 (222列, 892万行, 详见下方映射)
   ├── DM.CT_SALES_PERFORMANCE_DAILY_T — 销售业绩日报 (日粒度变体)
@@ -85,7 +88,7 @@ FineReport 报表 / API 接口
 ```
 DM.DM_FIN_OPERATIONS_MIX_SUM_T (903万行, 粒度: 月×日×渠道×客户×物料×销售组×WBS)
   ← 实际值:
-    DM.DM_FIN_OPERATIONS_MIX_T (经营混合中间表, 脚本未归档)
+    DM.DM_FIN_OPERATIONS_MIX_T (经营混合中间表=毛利以上合并底表, 2741万行, 脚本已归档: DWR/FIN/GL/PJob_DWS_DM_FIN_OPERATIONS_MIX_T.txt, 详见 [operations-mix.md](operations-mix.md))
     ├── LEFT JOIN DWIMD.DWI_MD_GENERAL_CONFIG_CODE_R (分销渠道名称, source_code='TVTWT')
     ├── LEFT JOIN DWIMD.DWI_MD_DATA_MATERIAL_GENERAL_T (物料主数据, 全量维度)
     ├── LEFT JOIN DWRDIM.DWR_DIM_CUST_GENERAL_D (客户通用主数据, end_date='4712-12-31')
@@ -171,7 +174,7 @@ DM.CT_SALES_PERFORMANCE_T (892万行, 222列, 粒度: 日×客户×销售组×�
     - 产品维度11个前缀分类: flagship(旗舰), high_value(高值), world_impression(世界印象), package(大包), n1(1+N) 等
     - 222列含: day/month/quarter/year + 当期/同期/上期/全年各粒度的业绩/面积/毛利/成本
     - 同期映射: last_year_* 用 DM_DIM_DATE_D.day_id_yago
-  ← 上游依赖: DM_AMBV2_ZZT_XSSR_T 和 DM_AMBV2_PROFIT_T 的ETL脚本未归档
+  ← 上游依赖: DM_AMBV2_ZZT_XSSR_T 和 DM_AMBV2_PROFIT_T 的ETL脚本均已归档（见上方"已归档"表; AMBV2_PROFIT_T 详见 [ambv2-profit.md](ambv2-profit.md)）
 ```
 
 ### DM_DP_API_SALES_TARGET
@@ -301,12 +304,17 @@ DM_SO_ORG_PERF_STAT_T (轻量汇总)
 
 | 缺失脚本对应的表 | 层级 | 说明 |
 |---|---|---|
-| DM_ZZT_XSSR_T | DWI/DWR | 销售输入事实表, 业绩宽表和部门业绩报表的核心数据源, **最重要的缺失** |
-| DM_AMBV2_ZZT_XSSR_T | DWI/DWR | 阿米巴销售输入, 轻量汇总和经营混合的核心上游 |
-| DM_AMBV2_PROFIT_T | DWI/DWR | 阿米巴利润表, 含成本/毛利/积分计算逻辑 |
-| DM_ZZT_XSSR_QT_T | DWI/DWR | 其他收支表, 经营混合的数据源之一 |
-| DM_RPT_GROUP_ACHIEVEMENT_AMB_T | DWI/DWR | 阿米巴达成表, 毛利宽表数据源 |
-| DM_FIN_OPERATIONS_MIX_T | DM | 经营混合中间表, 汇总表的上游, 含5张来源表UNION逻辑 |
+| DM_ZZT_XSSR_QT_T | DWI/DWR | 其他收支表, mix_t 三张源表之一 (infoprov='dm_zzt_xssr_qt_t') |
+| DM_RPT_GROUP_ACHIEVEMENT_AMB_T | DWI/DWR | 阿米巴达成表 (历史文档记其为 mix_t 来源之一, 当前脚本未见该 UNION 块) |
+
+**已归档（2026-11-02 确认, 原先误标缺失）**:
+
+| 表 | 脚本位置 | 状态 |
+|---|---|---|
+| DM_ZZT_XSSR_T | `huaweiclaude/DWR/FIN/COST/PJob_DM_ZZT_XSSR_T.txt` (+`_01`收入/`_02`变体) | HiveSQL 活跃, 收入成本底表·汇总表 |
+| DM_AMBV2_ZZT_XSSR_T | `huaweiclaude/DM/DM_CT/PJob_DWS_DM_AMBV2_ZZT_XSSR_T.txt` | 活跃, 1+N业绩底表 |
+| DM_AMBV2_PROFIT_T | `huaweiclaude/DWR/FIN/COST/PJob_DM_AMBV2_PROFIT_T.txt` | HiveSQL 活跃, 阿米巴收入成本底表（`DM_CT` 下同名 DWS 版已**停用**, 勿参照） |
+| DM_FIN_OPERATIONS_MIX_T | `huaweiclaude/DWR/FIN/GL/PJob_DWS_DM_FIN_OPERATIONS_MIX_T.txt` | DWS 活跃, 毛利以上合并底表（2741万行, 3张源表UNION, 独有 infoprov） |
 
 **影响**: 无法通过脚本确认上述表的字段派生逻辑、过滤条件、JOIN关系。当前血缘信息来源于:
 1. DM/DWS层的下游脚本中暴露的上游表名和字段名

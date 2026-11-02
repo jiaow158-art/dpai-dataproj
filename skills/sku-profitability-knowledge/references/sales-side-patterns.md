@@ -19,9 +19,9 @@
 ## 问题3 毛利贡献 / 四象限
 
 - 表：Mix 单表
-- 毛利额 = `gross_profit_after_sharing`（分摊后，主口径）；毛利率 = 毛利额÷`ambperformance`
+- 毛利额 = `gross_profit_after_sharing`（分摊后，主口径）；毛利率 = 毛利额÷**`notax_sales_net_amt`（不含税销售净额）**——分母禁用 `ambperformance`（含税，2026-11-02 业务口径裁定）。三套标准毛利率口径（阿米巴/标A/整体，分子切换、分母同 notax）详见 sales-performance 域 metrics.md 四-B
 - 四象限：横轴 = 销售增长率（本期 vs 上期等长窗口），纵轴 = 毛利率，气泡 = 销售额
-- 品类平均毛利率 = 品类聚合毛利÷品类聚合销售额（不是 SKU 毛利率平均）
+- 品类平均毛利率 = 品类聚合毛利÷品类聚合**不含税净额**（不是 SKU 毛利率平均）
 
 ## 问题7 渠道/区域 × SKU
 

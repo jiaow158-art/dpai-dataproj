@@ -84,18 +84,18 @@ SKU 键：Mix 表 `material_num` ↔ 内部口径表 `material` ↔ 出入库表
 |---|---|---|---|---|
 | sku_pareto（品类销售额TOP N + 累计占比） | Mix 单表 | 销售额 `SUM(ambperformance)`、面积 `SUM(zxsmj)`、物料名 `MAX(material_name)`、品类过滤 `category_name`；累计占比 = 窗口函数按 amt 降序累计 ÷ 总计 | 问题给定窗口（录制 2026-01~06），无基期 | 销售规模 = 含税达成主口径；一条 SQL 出齐 rank + cum_pct |
 | sku_trend_mom（单 SKU 销售额环比） | Mix 单表 | `SUM(ambperformance)` BY calmonth；环比 = (cur−LAG)÷LAG×100（LAG OVER ORDER BY calmonth，首月为 NULL） | 问题给定月区间（录制 2026-02~07）；**环比基期 = 窗口内上一月**，不外扩窗口 | 金点子场景（golden10 `137a0e7ed74a`）：Mix + ambperformance + LAG 与录制完全一致且命中 fresh——本行即该正确行为的固化 |
-| sku_margin_quadrant（毛利率×增长率四象限） | Mix 单表双 CTE（cur + prev） | 毛利率 = `SUM(gross_profit_after_sharing)÷SUM(ambperformance)×100`；增长率 = (cur.amt−prev.amt)÷prev.amt×100 | cur = 问题给定 3 个月（录制 2026-05~07）；**prev = 紧邻等长前 3 个月**（2026-02~04）；INNER JOIN prev 后按 cur.amt DESC 取 TOP N | 增长率 = 本期 vs 上期等长窗口（非同比）；无基期销量的 SKU 不入榜（录制口径） |
+| sku_margin_quadrant（毛利率×增长率四象限） | Mix 单表双 CTE（cur + prev） | 毛利率 = `SUM(gross_profit_after_sharing)÷SUM(notax_sales_net_amt)×100`（**分母不含税**，2026-11-02 业务口径裁定，÷ambperformance 作废）；增长率 = (cur.amt−prev.amt)÷prev.amt×100 | cur = 问题给定 3 个月（录制 2026-05~07）；**prev = 紧邻等长前 3 个月**（2026-02~04）；INNER JOIN prev 后按 cur.amt DESC 取 TOP N | 增长率 = 本期 vs 上期等长窗口（非同比）；无基期销量的 SKU 不入榜（录制口径）。毛利率分子暂用 gross_profit_after_sharing（录制口径），是否统一切阿米巴待业务拍板（遗留待确认项）；三套标准口径见 sales-performance metrics.md 四-B |
 | sku_turnover_dos（可售天数 TOP N） | 内部口径表（stock）× Mix（cost） | 月末库存 `SUM(stock_amt)`（阿米巴）；可售天数 = stock_amt ÷ (月均 `act_cost_sum_amt` ÷ 30)；库销比 = stock_amt ÷ 月均 `ambperformance` | 库存 = **期末快照月单月**（calmonth='202607'，YYYYMM）；成本均值窗 = **以快照月收尾的近 6 个月**（2026-02~07，YYYY-MM）；INNER JOIN cost | 快照 + 月均÷30 近似日均（陷阱 8 须透明声明）；两表日期格式不同必须分别写（陷阱 2） |
 | sku_health_flag（健康状态三态分布） | 出入库月表（act）× 内部口径表（stock） | 动销月数 = `COUNT(DISTINCT start_month)`（出库 `out_stock_qty>0 OR out_stock_area>0`）；三态 CASE：库存 0 且动销>0 = 缺货 / 库存>0 且动销 0 = 滞销 / 其余正常 | 动销 = 统计期全程（录制 2026-01~07，YYYY-MM）；库存 = 期末快照（202607，YYYYMM）；FULL OUTER JOIN；动销率分母 = 统计期月份数 | 在库口径全集（FULL OUTER，即陷阱 5 的 ~6.4 万 SKU）+ 月粒度原则（陷阱 4）的录制落地 |
 | sku_newproduct_split（新品/老品拆分） | 物料主数据（圈定）× Mix | 新品判定 `product_listed_date >= cutoff`；拆分 = `SUM(ambperformance)` + SKU 数 BY 新品/老品 | 销售窗 = 问题给定（录制 2026-01~06）；**cutoff = 提问时点前推 12 个月**（录制 '2025-07'，锚提问时点、非销售窗锚点）；Mix 为主集 LEFT JOIN 主数据 | 圈定字段填充率仅 3.8%（陷阱 9），新品偏小属正常须声明 |
-| sku_channel_pivot（渠道 × 单 SKU 透视） | Mix 单表 | `GROUP BY integrate_channel__t`；销售额 `SUM(ambperformance)`、毛利 `SUM(gross_profit_after_sharing)`、毛利率 = 聚合相除 | 问题给定区间（录制 2026-01~07），无基期 | 渠道默认 `integrate_channel__t`（第五节）；毛利率是聚合比不是 SKU 均值 |
+| sku_channel_pivot（渠道 × 单 SKU 透视） | Mix 单表 | `GROUP BY integrate_channel__t`；销售额 `SUM(ambperformance)`、毛利 `SUM(gross_profit_after_sharing)`、毛利率 = 毛利÷`SUM(notax_sales_net_amt)`×100（**分母不含税**，2026-11-02 业务口径裁定） | 问题给定区间（录制 2026-01~07），无基期 | 渠道默认 `integrate_channel__t`（第五节）；毛利率是聚合比不是 SKU 均值 |
 | sku_fall_top10（存货跌价 TOP N） | 内部口径表单表 | 跌价 `SUM(jchj_aging)`（阿米巴合计）；库存 `SUM(stock_amt)`；分段 `wbzq_6_12/12_24/24_fall_aging`；物料名 `MAX(material___t)` | **期末快照月单月**（calmonth='202607'，YYYYMM） | 本域库存/跌价一律阿米巴字段族（陷阱 1）；同表的管理字段族是 inventory 域口径（见下分歧点） |
 | sku_score_top20（综合评分 + 处置建议） | Mix（cur）+ 出入库月表（act）+ 内部口径表（stk）三源 | 五维评分公式与阈值见第三节；动销得分 = 100×active_months÷年内月份数；处置档位 CASE | **组合窗口**：近 3 月业绩（Mix 2026-05~07）+ 年初至提问月动销（出入库 2026-01~07）+ 期末库存快照（202607）；Mix 为主集 LEFT JOIN 两侧且 `amt>0` | "截至某月" = 该月收尾的三层窗口各管一维（业绩/动销/库存） |
 
 **跨 pattern 通用规则（9 条录制 SQL 一致）**
 
 - Mix 引用必带 `data_source IN ('S','T','D','')`（陷阱 7）；内部口径表 / 出入库表**不带**该过滤
-- 销售额一律 `ambperformance`，毛利一律 `gross_profit_after_sharing`，毛利率 / 增长率 / 环比一律聚合相除后 ×100
+- 销售额一律 `ambperformance`，毛利一律 `gross_profit_after_sharing`，毛利率 / 增长率 / 环比一律聚合相除后 ×100；**毛利率分母一律 `notax_sales_net_amt`**（不含税，2026-11-02 业务口径裁定——`ambperformance` 含税禁做毛利率分母；增长率的 amt 对比不受影响）
 - 销售侧以 Mix 为主集 LEFT JOIN 库存 / 主数据侧；仅 sku_margin_quadrant 与 sku_turnover_dos 是 INNER JOIN（无基期销量 / 无成本的 SKU 不入榜，录制口径）
 - 日期格式按表分别写：Mix 与出入库 'YYYY-MM'、内部口径 'YYYYMM'（陷阱 2）
 - 时间窗口一律用问题给定的字面量区间，**不可用 `MAX(calmonth)` 探测"最新月份"**——Mix 实测含 38 行 calmonth='S' 脏值（`MAX(calmonth)` 返回 'S'）与未来月份行（2026-10~12 各约 2,400 行，均未被 data_source 过滤排除），且当月为部分装载（202609 约 13.2 万行 vs 202608 约 30.3 万行）

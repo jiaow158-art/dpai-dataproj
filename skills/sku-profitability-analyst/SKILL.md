@@ -182,7 +182,8 @@ GROUP BY calmonth ORDER BY calmonth;
 
 ```sql
 WITH cur AS (
-  SELECT material_num, SUM(ambperformance) AS amt, SUM(gross_profit_after_sharing) AS gp
+  SELECT material_num, SUM(ambperformance) AS amt, SUM(gross_profit_after_sharing) AS gp,
+         SUM(notax_sales_net_amt) AS ntx
   FROM dm.dm_fin_operations_mix_sum_t
   WHERE calmonth BETWEEN '2026-05' AND '2026-07' AND data_source IN ('S','T','D','')
   GROUP BY material_num
@@ -193,7 +194,7 @@ WITH cur AS (
   GROUP BY material_num
 )
 SELECT c.material_num, ROUND(c.amt) AS amt,
-       ROUND(100.0*c.gp/NULLIF(c.amt,0),1) AS gp_rate,
+       ROUND(100.0*c.gp/NULLIF(c.ntx,0),1) AS gp_rate,
        ROUND(100.0*(c.amt-p.amt)/NULLIF(p.amt,0),1) AS growth_pct
 FROM cur c JOIN prev p USING (material_num)
 ORDER BY c.amt DESC LIMIT 50;
@@ -274,7 +275,7 @@ SELECT sku_type, sku_cnt, amt FROM split ORDER BY amt DESC;
 SELECT integrate_channel__t AS channel,
        ROUND(SUM(ambperformance)) AS amt,
        ROUND(SUM(gross_profit_after_sharing)) AS gp,
-       ROUND(100.0*SUM(gross_profit_after_sharing)/NULLIF(SUM(ambperformance),0),1) AS gp_rate
+       ROUND(100.0*SUM(gross_profit_after_sharing)/NULLIF(SUM(notax_sales_net_amt),0),1) AS gp_rate
 FROM dm.dm_fin_operations_mix_sum_t
 WHERE material_num = '{SKU}' AND calmonth BETWEEN '2026-01' AND '2026-07'
   AND data_source IN ('S','T','D','')

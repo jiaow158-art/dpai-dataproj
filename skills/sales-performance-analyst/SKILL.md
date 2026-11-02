@@ -323,16 +323,30 @@ ORDER BY calmonth;
 
 ### 模式 K：成本与毛利（Mix 表，业务标准口径）
 
-**成本口径（2026-08 业务确认）**：用户说"实际成本"→ `actual_cost_exclude_logistics`（**剔除物流成本**，业务标准口径）。`act_cost_sum_amt`（含分摊）与业绩表 `month_a_cost` 为旧口径，**非业务首选**，混用前必须说明。成本/毛利口径两表不同，**禁止跨表混算**。
+**成本口径（2026-08 业务确认）**：用户说"实际成本"→ `actual_cost_exclude_logistics`（**剔除物流成本**，业务标准口径）。`act_cost_sum_amt`（含分摊）与业绩表 `month_a_cost` 为旧口径，**非业务首选**，混用前必须说明。成本/毛利口径两表不同，**禁止跨表混算**。⚠️ 注意"实际A成本单价"的分母字段是 `act_cost_sum_amt`（业务报表原样，与整体毛利用的剔除物流成本字段**不同**，照抄不要"修正"）。
 
-**毛利率口径（2026-08-19 业务确认）**：毛利率 = `amb_profit_amt`（阿米巴毛利额）÷ `ambperformance`（阿米巴业绩额），**业务标准口径**。`gross_profit_after_sharing`（分摊后毛利）为旧口径——其值约为阿米巴毛利的 2 倍（瓷砖事业部月度：旧口径 23%~26% vs 阿米巴口径 12%~17%），两口径**禁止混报**，回答时声明用的是哪一个。
+**毛利率口径（2026-11-02 业务口径裁定，取代 2026-08-19 的 ÷ambperformance 确认——旧确认作废）**：
+- **分母统一 = `notax_sales_net_amt`（不含税销售净额）**。`ambperformance`（含税达成额）、`zhsxse`（含税销售额）、`deal_price_total`（成交总价）**一律禁做毛利率分母**——用含税分母会系统性低估毛利率。
+- **分子三套口径**（用户点名才切换，默认阿米巴）：
+
+| 毛利率 | 分子 | 完整公式 |
+|---|---|---|
+| 阿米巴毛利率（默认） | `amb_profit_amt` | `SUM(amb_profit_amt)/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+| 标A毛利率 | `a_overall_profit_amt` | `SUM(a_overall_profit_amt)/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+| 实际A毛利率（整体毛利） | **现算** `notax − actual_cost_exclude_logistics`（**无物理字段，不得用 `gross_profit_after_sharing` 替代**） | `(SUM(notax_sales_net_amt)-SUM(actual_cost_exclude_logistics))/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+
+`gross_profit_after_sharing` 是「分成后实际毛利额」**金额**指标，业务口径中无此口径的"率"——不要再自创 `gross_profit_after_sharing ÷ X` 的毛利率。
 
 ```sql
 SELECT calmonth,
        SUM(ambperformance) AS actual,
+       SUM(notax_sales_net_amt) AS notax_net,
        SUM(actual_cost_exclude_logistics) AS cost_ex_logistics,
        SUM(amb_profit_amt) AS amb_profit,
-       SUM(amb_profit_amt) / NULLIF(SUM(ambperformance), 0) * 100 AS margin_pct
+       SUM(amb_profit_amt) / NULLIF(SUM(notax_sales_net_amt), 0) * 100 AS amb_margin_pct,
+       SUM(a_overall_profit_amt) / NULLIF(SUM(notax_sales_net_amt), 0) * 100 AS std_a_margin_pct,
+       (SUM(notax_sales_net_amt) - SUM(actual_cost_exclude_logistics))
+         / NULLIF(SUM(notax_sales_net_amt), 0) * 100 AS overall_margin_pct
 FROM dm.dm_fin_operations_mix_sum_t
 WHERE calmonth BETWEEN '2026-01' AND '2026-05'
   AND node_desc2 = '瓷砖事业部'
@@ -341,7 +355,7 @@ GROUP BY calmonth
 ORDER BY calmonth;
 ```
 
-> 参考：瓷砖事业部月毛利率（阿米巴口径）通常 12%~17%；若算出 23%~26% 说明误用了旧口径 gross_profit_after_sharing，先查口径。异常偏离先查 data_source 与口径。跨多月多列 SUM 较慢（~8s），在 30s 超时内可接受。
+> 参考（2026-11-02 直连实测，瓷砖 2026-01~05，新分母口径）：**阿米巴 13.9%~18.5% / 标A 26.9%~31.2% / 整体(实际A) 21.6%~26.6%**。三套可并存、分母相同。若阿米巴毛利率算出 12%~16% 且分母已是 notax，先查 data_source；若算出 23%~26% 大概率分子误用了 gross_profit_after_sharing。异常偏离先查 data_source 与口径。跨多月多列 SUM 较慢（~8s），在 30s 超时内可接受。
 
 ## 数据质量检查项
 

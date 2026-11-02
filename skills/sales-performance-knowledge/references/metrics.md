@@ -47,6 +47,8 @@ DM/业绩表本身**没有** "最后更新时间" 字段；系统改用 `pg_stat
 | 实际成本（业务标准口径） | `actual_cost_exclude_logistics` | —（无对应字段） | **2026-08 业务确认：实际成本取剔除物流成本口径，仅 Mix 表有** |
 | 实际成本（含分摊旧口径） | `act_cost_sum_amt` | `month_a_cost` | 口径不同（Mix 含分摊），非业务首选 |
 | 分摊后毛利 | `gross_profit_after_sharing` | `month_a_gross_profit` | 口径不同 |
+| 整体毛利（实际A，**现算**） | `notax_sales_net_amt − actual_cost_exclude_logistics` | —（无对应字段） | **无物理字段**，禁用 gross_profit_after_sharing 替代（见四-B） |
+| 毛利率（三套：阿米巴/标A/整体） | 分母一律 `notax_sales_net_amt`，分子见四-B | — | **含税字段禁做分母**（2026-11-02 业务口径裁定） |
 
 **歧义陷阱**：用户说"业绩"时，默认指 `ambperformance` / `month_achievement`（含税达成额）。"不含税"或"净额"→ `notax_sales_net_amt`。"面积"→ `zxsmj`。
 
@@ -118,7 +120,30 @@ Mix 表有 **三套独立渠道体系**，当用户说"渠道"时必须确认指
 
 ---
 
-## 二、表选择决策树
+## 二-0、业绩域三表血缘（ETL 源码实证，2026-11-02）
+
+```
+dm_ambv2_zzt_xssr_t   阿米巴业绩表    815万行   订单行×凭证行   只有业绩/面积/数量
+dm_ambv2_profit_t     收入成本表      4600~5100万行 订单行×凭证行 只有收入/成本/毛利
+DM_ZZT_XSSR_QT_T      其他业务收支    —
+        │  UNION ALL（infoprov 标记来源表）
+        ▼
+dm_fin_operations_mix_t      毛利以上合并底表  2741万行  ★ 有 infoprov，无单据号
+        │  LEFT JOIN 8 张维度表 + GROUP BY
+        ▼
+dm_fin_operations_mix_sum_t  毛利以上表        903万行  ★ 主事实表，内置 node_desc1~9
+```
+
+**四条硬规则**（源码证据见 [operations-mix.md](operations-mix.md)）：
+
+1. **mix_sum 已经是两张源表合并汇总的结果** → 常规问题默认用它，不要回源表。
+2. **单据号（`doc_number`/`bill_num`/`ac_doc_nr`）在 mix_t 的 GROUP BY 中被丢弃** → 单据/凭证追溯必须回源表。
+3. **`infoprov` 没有传到汇总层** → mix_sum 无法按来源切分；要切分就去 mix_t。
+4. **`mix_sum` 内置排除 `comp_code<>'8000'` + `cust_group<>'Z0'`**（ETL L173），**mix_t 和两张源表都没有这层过滤** → 下钻到 mix_t/源表时必须自己补，否则与 mix_sum 对不上账。
+
+---
+
+## 二、表选择决策树（降级式：默认最粗够用，不够再下钻）
 
 ```
 用户问题
@@ -128,12 +153,28 @@ Mix 表有 **三套独立渠道体系**，当用户说"渠道"时必须确认指
 │   └── dm_fin_operations_mix_sum_t（有 _ys / _yc 后缀字段）
 ├── 需要"产品分类"下钻（高值/大规格/套餐/旗舰/IW/辅材等12种）？
 │   └── ct_sales_performance_t（222列预计算产品分类，判定规则详见「二-C」）
-├── 需要"客户/物料/品牌/区域"明细？
-│   └── dm_fin_operations_mix_sum_t（物料级粒度，含名称字段）
-├── 其余所有场景（达成率/趋势/渠道/组织下钻/面积）？
+├── 需要"单据/发票/财务凭证号"追溯？
+│   └── 回源表：dm_ambv2_profit_t（收入成本/凭证）或 dm_ambv2_zzt_xssr_t（业绩）
+│      ⚠️ mix_t / mix_sum 都没有单据号
+├── 需要按来源切分（这指标来自业绩表还是收入成本表）？
+│   └── dm_fin_operations_mix_t（独有 infoprov，详见 [operations-mix.md](operations-mix.md)）
+├── 需要 comp_code / salesorg / batch / stor_loc / val_type / bus_area / trading_mode / kalsm，或 act_cost_profit_amt？
+│   └── dm_fin_operations_mix_t（mix_sum 的 GROUP BY 里没有这些）
+├── 需要收入成本明细、毛利三口径（阿米巴/实际成本/标A）、1+N/跨事业部分成、内部结算价、周期价？
+│   └── dm_ambv2_profit_t（4600~5100万行明细底表，`data_source` 按指标族判定，组织用 `sales_division_1n_code`，另注意 `bus_area` 与国补改判 T，详见 [ambv2-profit.md](ambv2-profit.md)）
+├── 问"上市口径利润表" / "卫浴阿米巴利润表"（汇总层已有）？
+│   └── dm_fi_ambv2_profit_sum_listed_t / dm_sw_fi_ambv2_profit_sum_t（不要扫 5000 万行底表，详见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」）
+├── 其余所有场景（达成率/趋势/渠道/组织/客户/物料/品牌/区域下钻/面积）？
 │   └── dm_fin_operations_mix_sum_t（内置 node_desc + calmonth，写法最简单）
 └── 不确定？
     └── 默认用 dm_fin_operations_mix_sum_t（相当于费用域的 dm_fact_finance_cost_f）
+```
+
+**下钻时必须补的过滤**（mix_sum 内置、下层没有）：
+
+```sql
+AND coalesce(comp_code,'#') <> '8000'
+AND coalesce(cust_group,'#') <> 'Z0'
 ```
 
 ---
@@ -323,6 +364,7 @@ COALESCE(integrate_channel2, '#') = 'GD04'  -- 特惠品
 #### 7. 工程差价积分 (`engineering_adjust_*`)
 
 **口径**：佣金组=02 的工程差价积分金额（`zsyjf`，取绝对值）。这是**业绩调整项**，非原始销售业绩。
+> ⚠️ ABS 差异场景注（2026-11-02）：本节 ABS 是 **ct 表预计算分类的 ETL 判定写法**（源码原样）；Mix 表「使用积分」**指标口径**是 `0 − zsyjf`（负值输出，见四-B）。两处场景不同，不可混用。
 
 ```sql
 commission_group = '02'
@@ -507,6 +549,22 @@ GROUP BY org_code;
 | org关联 | `sales_center_code` ↔ Mix 表 `node_name5` |
 | 陷阱 | `org_type` 必须过滤（`业务单位`=汇总 / `营销部`=明细，总分重复）；金额单位万元；未来月份有数据；⚠️ 下方 org 关联 `sales_center ↔ node_name5` 实测 0/143 匹配（2026 全年，见「七」idx 30 教训 3），禁止用该键 JOIN 事实表 |
 
+### 3.4 dm_ambv2_profit_t — 阿米巴收入成本底表（明细级，2026-11 新增）
+
+| 属性 | 值 |
+|------|-----|
+| Schema | dm |
+| 粒度 | 订单行 × 开票行 × 财务凭证行（明细底表） |
+| 列数/行数 | 331 列 / 4600~5100万（glossary 估算 46,083,155；2026-11-02 实测 ~5100 万，引用时注明来源） |
+| 存储/分布列 | 列存；分布列 `calday, doc_number, bill_num, bill_item`（Hive 分区 `period_id_m`，DWS 用 `calmonth`） |
+| 时间字段 | `calmonth` (YYYY-MM)——**唯一可靠时间字段**（stat_day 有脏数据） |
+| 核心指标 | `notax_sales_net_amt`(收入,与Mix同源), `act_cost_sum_amt`(实际成本,与Mix同源), 毛利三口径 `amb_profit_amt`/`act_cost_profit_amt`/`a_overall_profit_amt`(实测差异巨大), `zxsmj`/`zxssl` |
+| 毛利三口径公式 | `act_cost_profit_amt` = notax − act_cost_sum_amt；`a_overall_profit_amt` = notax − standard_price_a；`amb_profit_amt` = 按 trading_mode 分支（A/null 用 amb_internal_price，否则用 cost_1n+cross_cost 再乘分成比例），并按 `bus_area IN ('E000','F000','J000','H000','I000','G001')` 决定是否扣 `zcbtzz`。源码 L4084-4111 |
+| 独有维度 | 单据/凭证/批次/合同号、SKU级成本毛利、1+N/跨事业部分成（`profit_1n_amt`/`cross_profit_amt`/`dept_inner_profit_amt` 是"毛利额"，与 `profit_1n` 等不同）、阿米巴内部结算价、周期价 |
+| 组织 | **无 node_desc1~9**——用 `sales_division_1n_code`（11000001瓷砖/11000002卫浴/11240102国际营销…）等值过滤 |
+| 陷阱 | ⚠️ **不能无脑 `data_source='S'`**：总额类字段取 S；分成类字段 S=卖出方 / D=供货方 / U=事业部内部供货方 / W=卫浴非全资，**值不同、不是重复**；**集团阿米巴利润表口径实为 `IN ('S','T')`**，上市口径 WHERE 根本不过滤；合并抵销必带 `cust_group <> 'Z0'` + `node_name2 <> 'R91000002'`；另：国补行改判 `'T'`；`bus_area` 影响成本调整值计入；`91230602` 关联交易行 notax=0；当月月中快照且成本读上期周期价；禁用备份表 |
+| 定位 | Mix 表成本/毛利指标的明细真相表；常规月度业绩序列仍首选 Mix；上市/卫浴口径走下游汇总表。详见 [ambv2-profit.md](ambv2-profit.md) |
+
 ---
 
 ## 四、标准指标公式
@@ -549,6 +607,61 @@ GROUP BY org_code;
 | 预测销售额 | `ambperformance_yc` | Mix 表内置 | 元 | 动态调整（2026-08 业务确认名） |
 
 用户说"目标完成率"和"预算达成率"是不同概念，口语经常混用。
+
+## 四-B、毛利率与单价标准口径（2026-11-02 业务口径裁定）
+
+> 依据 2026-11-02 业务口径确认（实证来源：集团经营分析-对比分析报表，Mix 表下游权威口径）。**本节取代 2026-08-19 的「毛利率=÷ambperformance」业务确认。**
+
+### 三套毛利率（分母统一不含税）
+
+| 毛利率 | 分子 | 完整 SQL |
+|---|---|---|
+| **阿米巴毛利率**（默认） | `amb_profit_amt` | `SUM(amb_profit_amt)/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+| **标A毛利率** | `a_overall_profit_amt` | `SUM(a_overall_profit_amt)/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+| **实际A毛利率**（整体毛利） | **现算**（见下） | `(SUM(notax_sales_net_amt)-SUM(actual_cost_exclude_logistics))/NULLIF(SUM(notax_sales_net_amt),0)*100` |
+
+- ❌ 分母出现 `ambperformance`（含税达成额）/ `zhsxse`（含税销售额）/ `deal_price_total`（成交总价）即判错
+- `gross_profit_after_sharing` 是「分成后实际毛利额」**金额**指标（业务报表原样保留），但**无对应"率"口径**，禁止自创 ÷X 毛利率
+- 实测参考（瓷砖 2026-01~05，data_source S/T/D/''）：阿米巴 **13.9~18.5%** / 标A **26.9~31.2%** / 整体 **21.6~26.6%**
+
+### 整体毛利 = 现算（无物理字段）
+
+```
+整体毛利 = SUM(notax_sales_net_amt) − SUM(actual_cost_exclude_logistics)
+```
+**不得**用 `gross_profit_after_sharing` 替代（那是"分成后实际毛利额"，另一个指标）。注意：整体毛利用剔除物流成本口径，而"实际A成本单价"用 `act_cost_sum_amt`（含分摊）——两者字段不同是业务报表原样，照抄不要"修正"。
+
+### 八套单价（两组分母，不可互换）
+
+| 单价 | 分子/分母字段 | 说明 |
+|---|---|---|
+| 成交单价_数量 | `deal_price_total / s_zxssl` | 与成交总价同为业绩口径 → 用 **s_** 前缀量 |
+| 成交单价_面积 | `deal_price_total / s_zxsmj` | 同上 |
+| 实际A成本单价_数量 | `act_cost_sum_amt / zxssl` | 成本为销售口径 → 用无前缀量 |
+| 实际A成本单价_面积 | `act_cost_sum_amt / zxsmj` | 同上 |
+| 标A成本单价_数量 | `standard_price_a / zxssl` | 同上 |
+| 标A成本单价_面积 | `standard_price_a / zxsmj` | 同上 |
+| 阿米巴成本单价_数量 | `amb_internal_price / zxssl` | 同上 |
+| 阿米巴成本单价_面积 | `amb_internal_price / zxsmj` | 同上 |
+
+单位换算：金额/数量/面积各 ÷10000（万元/万片/万㎡）→ 万元÷万片=元/片、万元÷万㎡=元/㎡。
+
+### 积分字段（易错）
+
+| 字段 | 正确写法 | 说明 |
+|---|---|---|
+| 使用积分 | **`0 − SUM(zsyjf)`（负值）** | 不是 `ABS(zsyjf)`（ABS 仅在 ct 表预计算分类的 ETL 判定中用，见二-C 差异场景注） |
+| 预提积分 | `SUM(zytjf)` | 正常正值 |
+
+### 偏差率族（集团经营分析报表独有，归因/对比类问题标准口径）
+
+每个指标可算 4 类对照：**本期实际 / 同比值（start−100）/ 环比值（−1个月）/ 预算值（`_ys` 后缀）**；对比层级可对"上层运营单位"（`orgup = LEFT(org1,9) + (RIGHT(org1,1) − 1)`）算同比/环比/预算偏差率。"指标与上层运营单位对比（同比偏差率）" = (实际值 − 同期值) − 上层运营单位同比偏差率。
+
+### 集团经营分析报表硬约束（做对齐核对时照抄）
+
+- 组织过滤：`coalesce(node_name2,'#') NOT IN ('R91000002','R91000001')`（排除过渡部门）
+- data_source：集团经营分析报表默认参数 `IN ('S','T')`；知识库常规查询仍用「五」的层级规则（S/T/D/''）——与该报表对数时用前者并声明
+- 时间过滤：`substr(calday,1,6) BETWEEN start AND end` **且** `calday <= to_char(now()-interval '1 day','yyyyMMdd')`（后半句防未来/当日未结数据，核对时必须保留）
 
 ---
 
@@ -609,6 +722,11 @@ WHERE stat_year = '2026' AND stat_month = '2026-05'
 17. **【P1 跨表下钻可行性】** 在 `dm_dp_api_sales_target` 上做产品/客户/物料/品牌下钻 = **必然失败**（该表只 14 列，无产品/客户/物料维度）。在 `ct_sales_performance_t` 上做品牌/品类/规格下钻 = **必然失败**（无产品维度字段）。下钻前必查上方「二-B-2 跨表下钻可行性表」。
 18. **【待调研·业务提出 2026-08】区域业绩按"客户/工程 WBS"归属区分**：Mix 表 `region_province_name` 为内置区域（随客户销售区域走），业绩域表内无 WBS 归属字段；工程 WBS 主数据在跨域 [wbs-master](../../sources-of-truth/business-context/wbs-master.md)（129万 WBS 元素）。若需按 WBS 归属区域业绩，须调研 LTC/订单链路表后另行扩展——当前超出本 Skill 覆盖范围，遇此类问题用 Unbook 话术引导并记录缺口。
 18. **【P1 预计算分类字段】** `ct_sales_performance_t` 独有 `high_value_*` / `large_spec_*` / `package_*` / `n1_*` / `gd04_*` / `qjcp_*` / `iw_*` / `fc_*` / `word_impression_*` / `engineering_adjust_*` / `share_warehouse_*` / `other_adjust_*` 共 **12 组预计算产品分类字段**。用户问"高值/大规格/套餐/特惠品/旗舰产品/辅材/IW/世界印象/工程差价积分/共享仓"→ 换 ct_sales_performance_t 用对应字段，不要在 mix 表上硬过滤。**判定规则详见上方「二-C」章节**（含每类的渠道、产品所有权、等级、品牌编码等完整 WHERE 条件）。
+19. **【P0 dm_ambv2_profit_t 双计与时间字段】** 收入成本明细底表（4600~5100万行，列存）：(a) **不能无脑 `data_source='S'`**——总额类字段（`notax_sales_net_amt`/`act_cost_sum_amt` 等）S 与 D 是同一笔跨事业部交易的两条记录、值相同，不加过滤直接 SUM 双计，取 S 即可；但分成类字段（`cross_*`/`profit_1n`/`ext_*_amt`/`dept_inner_*`）S=卖出方、D=供货方、U=内部供货方、W=卫浴非全资调整，**值不同、不是重复**，按视角取；**集团阿米巴利润汇总口径实为 `data_source IN ('S','T')`**（`PJob_DWS_DM_FI_AMBV2_PROFIT_SUM_T` L750，要含 SAP 调整值），**上市口径 WHERE 完全不过滤 data_source**（`PJob_DM_FI_AMBV2_PROFIT_SUM_LISTED_T` L120-122，全在 CASE 内判定）；(b) 时间过滤**只能用 `calmonth`**——`stat_day` 存在 `0002-11-30` 脏数据、calday 有 `00000000`；(c) 本表**无 node_desc**，Mix 的 `node_desc2='瓷砖事业部'` 写法在此必然 0 行，改用 `sales_division_1n_code='11000001'`；(d) ⚠️ **国补行会被改判为 `'T'`**（`infoprov` 为"国补调整值-分摊/冲销"的 S 行），纯 `'S'` 聚合会漏国补调整值——需国补口径时用 `IN ('S','T')`；(e) `bus_area` 是隐藏过滤维度：`IN ('E000','F000','J000','H000','I000','G001')` 时 `zcbtzz` 才计入阿米巴毛利，标准口径排除 `('G000','G001')`；(f) 同名备份/临时表泛滥（`_init`/`_temp`/`_tmp1`/`_tmp2`/`_*_qyj_*`），只用主表；(g) **跨 2025-04 对比阿米巴毛利、跨 2025-01 对比客户/组织维度时必须声明口径变更**（ETL 2025-04-29 取消产品所有权判断、2025-01-17 改母客编/组织逻辑）。详见 [ambv2-profit.md](ambv2-profit.md)。
+21. **【P0 毛利率分母必须不含税（2026-11-02 业务口径裁定，取代 2026-08-19 ÷ambperformance 确认）】** 毛利率分母一律 `notax_sales_net_amt`；**分母出现 `ambperformance`/`zhsxse`/`deal_price_total` 即判错**（含税口径，系统性低估 1~3 个百分点）。分子三套（阿米巴 `amb_profit_amt` 默认 / 标A `a_overall_profit_amt` / 整体现算），完整公式与实测区间见「四-B」。`gross_profit_after_sharing` 只作金额指标、不算率。使用积分输出 `0 − zsyjf`（负值），不要 ABS。八套单价分母两组不可互换：成交单价用 `s_zxssl`/`s_zxsmj`，成本单价用 `zxssl`/`zxsmj`。
+20. **【P0 下钻必须补 `comp_code` / `cust_group` 过滤】** `dm_fin_operations_mix_sum_t` 在 ETL L173 **内置排除** `coalesce(comp_code,'#')<>'8000'`（测试公司）和 `coalesce(cust_group,'#')<>'Z0'`（内部客户组），但 **`dm_fin_operations_mix_t`、`dm_ambv2_profit_t`、`dm_ambv2_zzt_xssr_t` 三层都没有这层过滤**。→ 从 mix_sum 下钻到任何下层时**必须自己补上这两条**，否则金额比 mix_sum 大、两边对不上账。
+21. **【P1 单据号与 `infoprov` 的层级边界】** ①单据号（`doc_number`/`bill_num`/`ac_doc_nr`）**只在两张源表**有，`mix_t` 的 GROUP BY 已将其丢弃，`mix_sum` 更没有 → 单据/发票/凭证追溯**必须回源表**，在 mix_t/mix_sum 上查必然失败。②`infoprov` **只在 `mix_t`** 有，`mix_sum` 的 SELECT 列表未继承该列 → 要按来源切分只能去 mix_t。③**返点 `zfdje` / 使用积分 `zsyjf` / 预提积分 `zytjf` 只认 `infoprov='dm_ambv2_profit_t'`**（mix_sum ETL L129-131 的硬编码 CASE），在 mix_t 上不加此过滤直接 SUM 会**偏大**。详见 [operations-mix.md](operations-mix.md)。
+22. **【P1 `data_source` 跨源表语义不一致】** `mix_t` UNION 了三张源表，`data_source` 继承各自含义，**同一字母在不同源表意思不同**：`D` 在 `dm_ambv2_profit_t` = **产品方分成行**（trading_mode B/C 供货方），在 Mix 体系 = **重算**；`W` 在 ambv2 = 共享仓调整业绩，在 Mix 体系 = 卫浴费全资成本调整值。跨表套用 `data_source` 过滤规则必然取错。
 
 ---
 
@@ -632,7 +750,9 @@ WHERE stat_year = '2026' AND stat_month = '2026-05'
 | customer_topn（TOP10客户） | 同上 | `customer + cust_name`，`IS NOT NULL AND ambperformance > 0` | 同上 | 客户名称仅 mix 有 |
 | region_breakdown（按省份达成TOP10） | 同上 | `SUM(ambperformance)` BY `region_province_name`，`IS NOT NULL AND ambperformance > 0` | 同上 | 区域字段内置 |
 | high_value_analysis（高值产品按渠道达成） | dm.ct_sales_performance_t | `SUM(high_value_month_achievement)` BY `integrate_channel_code`，calday 月末 | 不加组织过滤 | 预计算产品分类仅业绩表有（判定规则见二-C） |
-| cost_margin_trend（成本与毛利趋势） | dm.dm_fin_operations_mix_sum_t | `actual_cost_exclude_logistics`（业务标准成本）+ `gross_profit_after_sharing`；毛利率 = gp/amb×100 | node_desc2 + data_source | 业务确认成本口径仅 mix 有（见一.1） |
+| cost_margin_trend（成本与毛利趋势） | dm.dm_fin_operations_mix_sum_t | `actual_cost_exclude_logistics`（业务标准成本）+ `gross_profit_after_sharing`（分成后毛利**金额**）；毛利率**分母一律 `notax_sales_net_amt`**、分子三套（阿米巴/标A/整体，默认阿米巴，见四-B；2026-11-02 业务口径裁定，÷ambperformance 作废） | node_desc2 + data_source | 业务确认成本口径仅 mix 有（见一.1） |
+| revenue_cost_detail（收入成本明细：单据/凭证/批次/SKU级、毛利三口径、分成、内部结算价） | dm.dm_ambv2_profit_t | `SUM(notax_sales_net_amt)`/`SUM(act_cost_sum_amt)`/毛利按口径选 `amb_profit_amt`/`act_cost_profit_amt`/`a_overall_profit_amt`；data_source **按口径选**：总额类 `'S'` / 集团利润表 `IN ('S','T')` / 分成按 卖出方(S)·供货方(D)·内部(U)；时间只用 calmonth；合并抵销加 `cust_group <> 'Z0'` + `node_name2 <> 'R91000002'` + `bus_area NOT IN ('G000','G001')` | `sales_division_1n_code='11000001'` 等值（**无 node_desc**） | 明细底表，Mix 的成本/毛利字段源自此表；常规月度序列仍走 mix（见 [ambv2-profit.md](ambv2-profit.md)） |
+| listed_profit / sw_amb_profit（上市口径利润表、卫浴阿米巴利润表） | `dm_fi_ambv2_profit_sum_listed_t` / `dm_sw_fi_ambv2_profit_sum_t` | 汇总层已有，直接取 | 按各汇总表自身组织字段 | **不要扫 5000 万行底表**；汇总表家族见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」 |
 
 **idx 30（org_monthly_achievement，「2026年1-6月卫浴事业部业绩情况」）失败教训 → 规则（2026-09-20 直连实测）**
 

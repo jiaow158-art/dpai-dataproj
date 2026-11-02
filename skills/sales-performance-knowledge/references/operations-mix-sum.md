@@ -14,6 +14,14 @@
 
 **定位**：业绩域的**主事实表**，相当于费用域的 `dm_fact_finance_cost_f`、应收域的 `dm_ar_analysis_rpt_f`。内置 `node_desc1~9` + `node_name1~9`，绝大多数查询无需 JOIN 组织表。
 
+**上游血缘**：本表 = [dm_fin_operations_mix_t](operations-mix.md)（毛利以上合并底表，2741万行）+ 8 张维度表 LEFT JOIN + GROUP BY 汇总而来；而 `mix_t` = `dm_ambv2_profit_t`(收入成本表) ∪ `dm_ambv2_zzt_xssr_t`(阿米巴业绩表) ∪ `DM_ZZT_XSSR_QT_T` 三张源表 UNION。→ **本表已包含业绩表与收入成本表的数据**，常规问题不必回源表。
+
+**两条层级边界**：
+- **无单据号**：`doc_number`/`bill_num`/`ac_doc_nr` 在上游 `mix_t` 汇总时已丢弃 → 单据/凭证追溯须回 `dm_ambv2_profit_t` 或 `dm_ambv2_zzt_xssr_t`。
+- **无 `infoprov`**：上游 `mix_t` 有来源标识列，本表 SELECT 未继承 → 要按"业绩表 vs 收入成本表"切分须去 [operations-mix.md](operations-mix.md)。
+
+**内置过滤（ETL L173，下层表没有）**：`coalesce(comp_code,'#') <> '8000'`（测试公司）+ `coalesce(cust_group,'#') <> 'Z0'`（内部客户组）。→ 从本表**下钻**到 `mix_t` / 源表时必须自行补上这两条，否则金额对不上。
+
 ## 维度列
 
 ### 组织维度（内置，无需 JOIN！）
@@ -108,8 +116,8 @@
 | 列名 | 说明 |
 |------|------|
 | `zfdje` | 返点金额 |
-| `zsyjf` | 商业折扣 |
-| `zytjf` | 业态折扣 |
+| `zsyjf` | 使用积分（业务口径输出 `0 − zsyjf` 负值；2026-11-02 DDL/报表实证，原"商业折扣"为误标） |
+| `zytjf` | 预提积分（原"业态折扣"为误标；含 `zytjf_sg` 手工 / `zytjf_xt` 系统） |
 
 ## data_source 说明
 
