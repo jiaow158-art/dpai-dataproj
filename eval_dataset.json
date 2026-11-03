@@ -12,7 +12,7 @@
       "otd-fulfillment"
     ],
     "description": "Offline evaluation dataset for Skills accuracy tracking",
-    "total": 85,
+    "total": 86,
     "passed": 30,
     "failed": 0,
     "runner": "run_eval.py"
@@ -3127,6 +3127,20 @@
         {"zdpsyb___t": "丽适岩板", "long_fall": "0", "total_fall": "1637910", "long_ratio_pct": "0.0"}
       ],
       "checksum": "rows=5"
+    },
+    {
+      "domain": "inventory",
+      "pattern": "others_accage_structure",
+      "question": "2026年10月非产成品（原材料/半成品/包装）按物料类型的库龄结构如何？",
+      "sql": "SELECT matl_type, matl_type___t, stockage_seg,\n       SUM(final_stock_qty) AS qty,\n       ROUND(SUM(final_zsjkcje)) AS amt\nFROM dm.dm_fin_stock_detail_accage_others_t\nWHERE period_id_m = '202610'\nGROUP BY matl_type, matl_type___t, stockage_seg\nORDER BY matl_type, amt DESC;",
+      "row_count": 45,
+      "elapsed_ms": 1184,
+      "data": [
+        {"matl_type": "HALB", "matl_type___t": "半成品（东鹏）", "stockage_seg": "0-30天", "qty": "4068435.999691", "amt": "32937729"},
+        {"matl_type": "HALB", "matl_type___t": "半成品（东鹏）", "stockage_seg": "91-180天", "qty": "78436.333613", "amt": "4290137"},
+        {"matl_type": "HALB", "matl_type___t": "半成品（东鹏）", "stockage_seg": "3年以上", "qty": "127661.980625", "amt": "3220494"}
+      ],
+      "checksum": "faafc99263cce347a4bafb9851c58ba8"
     },
     {
       "domain": "redteam",

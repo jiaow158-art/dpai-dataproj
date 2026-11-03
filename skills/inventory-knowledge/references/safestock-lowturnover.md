@@ -78,12 +78,13 @@
 |---|---|
 | calmonth | 会计期间 |
 | zsjkcje | 资金占压金额（总） |
-| ybzq_bzdq_amt | 已包装-标准地区 |
-| ybzq_bzdq_3_amt | 已包装-标准地区-3月 |
-| wbzq_6_amt | 未包装 0-6月 |
-| wbzq_6_12_amt | 未包装 6-12月 |
-| wbzq_12_24_amt | 未包装 12-24月 |
-| wbzq_24_amt | 未包装 24月+ |
+| ybzq_bzdq_amt | 有保质期产品，已到期 |
+| ybzq_bzdq_3_amt | 有保质期产品，距到期 3 个月以内 |
+| ybzq_bzdq_d3_amt | 有保质期产品，距到期 >3 个月（无跌价） |
+| wbzq_6_amt | 无保质期产品，6 个月以内 |
+| wbzq_6_12_amt | 无保质期产品，6-12 月 |
+| wbzq_12_24_amt | 无保质期产品，1-2 年 |
+| wbzq_24_amt | 无保质期产品，2 年以上 |
 | other_amt | 其他金额 |
 
 ## 库存周转月度

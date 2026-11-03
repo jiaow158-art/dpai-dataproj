@@ -21,7 +21,8 @@ description: 库存仓储领域数据知识库。当用户询问库存账龄、�
 
 | 文档 | 对应问题类型 |
 |---|---|
-| [stock-accage.md](references/stock-accage.md) | 库存账龄分析、库龄分段、按工厂/物料/科目的库存余额和金额 |
+| [stock-accage.md](references/stock-accage.md) | **产成品（FERT）**库存账龄、库龄分段、跌价/减值、按工厂/物料/事业部的余额与金额。**默认管理口径 `zsjkcje` + `jchj_amt`**；阿米巴 `stock_amt`/`jchj_aging` 需点名。有保质期**四桶**（含 `ybzq_bzdq_d3` >3月）；库龄四套口径（标准/自然账龄/阿米巴/销售单元） |
+| [stock-accage-others.md](references/stock-accage-others.md) | **非产成品**（原材料/半成品/包装/非估价）库龄，FIFO 算法，`stockage` 天数 + 9 段。**仅当用户明确问"原材料/半成品/包装/非产成品"时才用**；"全集团库存/总库存"默认走 `_t_2023` 产成品口径，**不要两表相加**；金额为 FIFO 估值非账面 |
 | [transit-inventory.md](references/transit-inventory.md) | 在途库存、采购在途、交货在途 |
 | [warehouse-stock.md](references/warehouse-stock.md) | 仓库库存查询、全类型库存（可用/冻结/质检）、按工厂/渠道/品牌的库存现状 |
 | [stock-stat-month.md](references/stock-stat-month.md) | 库存统计月报、按库龄分段的库存统计 |

@@ -60,9 +60,9 @@ DWRDIM 层 (维度主数据)
   └── DWR_DIM_COUNTRY_NAME_D — 国家/地区
     ↓
 DM 层 (数据集市 — 19 张核心表)
-  ├── dm.dm_fin_stock_detail_accage_t_2023 — **库存账龄明细** (1.44亿行, 183列, 详见下方)
+  ├── dm.dm_fin_stock_detail_accage_t_2023 — **库存账龄明细** (2.28亿行, 183列, 详见下方)
   ├── dm.dm_fin_stock_detail_accage_t — 旧版账龄 (91列, 不建议使用)
-  ├── dm.dm_fin_stock_detail_accage_others_t — 辅材账龄 (102列)
+  ├── dm.dm_fin_stock_detail_accage_others_t — 非产成品库龄 (102列, FIFO算法, 6527万行, 详见 stock-accage-others.md)
   ├── dm.dm_wm_all_type_stock_t — 全类型库存快照 (88列)
   ├── dm.dm_transit_inventory_t — 在途库存 (采购侧)
   ├── dm.dm_b1_transit_inventory_t — B1客户在途 (销售侧, 独立表)
@@ -88,7 +88,7 @@ FineReport 报表 / 管理驾驶舱
 ### DM_FIN_STOCK_DETAIL_ACCAGE_T_2023 (库存账龄核心事实表)
 
 ```
-DM.DM_FIN_STOCK_DETAIL_ACCAGE_T_2023 (1.44亿行, 183列, 粒度: 月×公司×工厂×库存地点×物料×批次)
+DM.DM_FIN_STOCK_DETAIL_ACCAGE_T_2023 (2.28亿行, 183列, 粒度: 月×公司×工厂×库存地点×物料×批次)
   ← ETL架构: 5层CTE链 mat → stock1 → stock2 → stock3 → stock4 → stock5 → INSERT OVERWRITE PARTITION(calmonth)
   ← 核心数据源 (单源 + 8路LEFT JOIN):
     Hive ETL: huaweiclaude/DM/PJob_DM_FIN_STOCK_DETAIL_ACCAGE_T_2023.txt (~1290行)
@@ -470,7 +470,7 @@ dm_otd_wm_stock_stat_month_t (库存月报)
 
 ### DM_FIN_STOCK_DETAIL_ACCAGE_T_2023 (库存账龄)
 
-1. **三套账龄表版本 (t / t_2023 / others_t) 的实质差异**：`dm_fin_stock_detail_accage_t` (旧版, 无 shelf_end_date 分支)、`dm_fin_stock_detail_accage_t_2023` (本表, 主用)、`dm_fin_stock_detail_accage_others_t` (辅材专用, zpcrk_fc 批次入库日期)。**为什么**：2023年改版引入保质期概念后逻辑裂化, 旧表保留向后兼容。**如何应用**：库存账龄分析永远查 `_t_2023`, 辅材查 `_others_t`, 不要混用。
+1. **三套账龄表版本 (t / t_2023 / others_t) 的实质差异**：`dm_fin_stock_detail_accage_t` (旧版, 无 shelf_end_date 分支)、`dm_fin_stock_detail_accage_t_2023` (**仅产成品 FERT**, 宽表多桶, 按批次日期分桶)、`dm_fin_stock_detail_accage_others_t` (**排除 FERT 的非产成品**, FIFO 物料凭证倒推库龄, `stockage` 天数 + 9 段)。**为什么**：2023年改版引入保质期概念后逻辑裂化, 旧表保留向后兼容; 非产成品无保质期、需按 FIFO 算真实库龄, 故独立成表。**如何应用**：`_t_2023` 与 `_others_t` 物料范围零重叠（2026-11-03 实测 `_2023` 的 FERT 占比 100%、`_others_t` FERT 行数为 0），但**业务默认"库存/全集团库存"就是 `_t_2023` 的产成品口径，禁止两表相加**（2026-11-03 业务确认）；`_others_t` 仅在明确问非产成品时使用。
 
 2. **保质期工厂范围逐步扩大 (历史事件)**: 7C/73 → 72 → 7C/73/72。脚本 update history 显示 2023-05-09 (guzhengfeng) "增加 '72*' 工厂的有保质期产品判断", bz_flag CASE 中硬编码 `substr(plant,1,2) in ('7C','73','72')`。**为什么**：卫浴业务上线后临期产品管理范围分阶段推广。**如何应用**：跨期分析 2023-05 前后 72 工厂的保质期口径会跳变, 趋势分析需提示口径切换。
 
@@ -478,7 +478,7 @@ dm_otd_wm_stock_stat_month_t (库存月报)
 
 4. **7C工厂的 0.6/0.7 时间切换**: `calmonth < 202203` → 系数 0.6; `calmonth >= 202203` → 系数 0.7。**为什么**：2022年3月调整了 7C 工厂的减值政策。**如何应用**：跨 2022-03 的同比/环比减值金额对比有口径跳变。
 
-5. **批次入库日期字段在不同时期含义不同**: `zmmm_o017_zbatch_date` (SAP 入库日期, 直接来源) vs `batch_rk_date` (阿米巴调整后批次入库日期, 经 `loc_flag=1 AND mat.budat IS NOT NULL` 修正) vs `zpcrk_fc` (辅材专用批次入库日期, 仅 `_others_t` 用)。**为什么**：阿米巴考核口径与 SAP 财务口径存在差异, 部分库存地点需用 SDI 物料凭证最早过账日修正。**如何应用**：账龄金额 (wbzq_*_aging) 用 `batch_rk_date` 计算, 自然账龄 (zrzlcp_*) 用 `zmmm_o017_zbatch_date` — 两个口径在同张表共存。
+5. **批次入库日期字段在不同时期含义不同**: `zmmm_o017_zbatch_date` (SAP 入库日期, 直接来源) vs `batch_rk_date` (阿米巴调整后批次入库日期, 经 `loc_flag=1 AND mat.budat IS NOT NULL` 修正) vs `zpcrk_fc` (辅材批次入库日期, 在 `_others_t` 中保留但**不参与库龄计算**)。**为什么**：阿米巴考核口径与 SAP 财务口径存在差异, 部分库存地点需用 SDI 物料凭证最早过账日修正。**如何应用**：账龄金额 (wbzq_*_aging) 用 `batch_rk_date` 计算, 自然账龄 (zrzlcp_*) 用 `zmmm_o017_zbatch_date` — 两个口径在同张表共存。**`_others_t` 的库龄由 FIFO 命中的凭证过账日 `budat` 决定**，不是这三个字段。
 
 6. **自制/外协判定 (ziswx) 25+行CASE WHEN**: 复杂嵌套, 分支维度包括 `prod_property` (B0001 走产区逻辑 vs 其他走 factory_type)、`zww010` 产区编码、`zprodh2` 产品层次2、`plant` 工厂前2位、`comp_code` 公司前2位。**为什么**：SAP 主数据不完整, 需业务规则补齐。**如何应用**：自制/外协汇总用 `ziswx` 字段或 `product_base`/`foreign_own`; 个别边界 case 可能 fall through 到 ELSE, 数据稽核时需关注 NULL。
 
@@ -488,11 +488,11 @@ dm_otd_wm_stock_stat_month_t (库存月报)
 
 9. **2025-03-14 外协供应商字段新增**: 新增 `supplier_or_creditor_num` 字段, 来自 `dwi_md_matl_batch_info_t`, 同时产区/产区描述/生产基地逻辑优化 (2025-03-24 第二版)。**为什么**：外协产能扩大, 需供应商级追踪。**如何应用**：2025-03 前的外协供应商数据为空, 不能做长周期外协集中度分析。
 
-10. **DWS同步为增量 (DELETE + INSERT)**: `DELETE FROM ... WHERE calmonth BETWEEN ${PERIOD_ID_M1} AND ${PERIOD_ID_M2}` 后 `INSERT INTO`。**为什么**：1.44亿行表全量重刷代价太大。**如何应用**：补刷历史月只需重跑该月分区; 但若维度主数据变更 (如物料批次 shelf_end_date 修正), 需重刷受影响月份。
+10. **DWS同步为增量 (DELETE + INSERT)**: `DELETE FROM ... WHERE calmonth BETWEEN ${PERIOD_ID_M1} AND ${PERIOD_ID_M2}` 后 `INSERT INTO`。**为什么**：2.28亿行表全量重刷代价太大。**如何应用**：补刷历史月只需重跑该月分区; 但若维度主数据变更 (如物料批次 shelf_end_date 修正), 需重刷受影响月份。
 
 11. **mat CTE 移动类型过滤陷阱**: `BWART in ('101','911','913','701','Z01','511','982','991','309','131','531','411','561','653')`, 且对采购订单类型 `BSTTYP_SG='K'` 只取 `('411','101','991')`。**为什么**：批次最早入库日需排除退货/转移等非入库凭证。**如何应用**：batch_rk_date 为空或异常时, 检查 SDI_MATDOC_1001 是否有未覆盖的 BWART。
 
-12. **Hive 性能参数**: 脚本顶部设置 `hive.auto.convert.join` + `mapjoin.smalltable.filesize=100MB` + `tez.grouping.min/max-size=20MB`。**为什么**：1.44亿行主表 JOIN 小维度表需走 mapjoin 避免 shuffle。**如何应用**：在 DWS 上查询本表时, 对维度表 JOIN 也建议用 broadcast hint。
+12. **Hive 性能参数**: 脚本顶部设置 `hive.auto.convert.join` + `mapjoin.smalltable.filesize=100MB` + `tez.grouping.min/max-size=20MB`。**为什么**：2.28亿行主表 JOIN 小维度表需走 mapjoin 避免 shuffle。**如何应用**：在 DWS 上查询本表时, 对维度表 JOIN 也建议用 broadcast hint。
 
 ### DM_RPT_WM_CXC_DAY_SUM (CXC 日报)
 

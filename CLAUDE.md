@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **skills/**：6 域配对 `{domain}-knowledge`（路由+references）+ `{domain}-analyst`（6 步工作流+对抗审查，+6% 准确率不可跳）+ `report-generator`。各域 `metrics.md` 的 **"pattern → 首选表与字段路由"节是口径判定标准**（以 eval_dataset 录制口径为准，不替业务拍板）——修口径问题先看这节。
 
 **评测体系**
-- `eval_dataset.json`：85 场景（6 域 79 + 红队 6）= 业务正确性标准；**数据集是标准**——改问题/SQL/data 都要逐条记变更清单（先例：`eval_results/round-manual/T6-changes.md`、`dataset-repair-20260920.md`），文本级替换保字节形态（CRLF/无 BOM）
+- `eval_dataset.json`：86 场景（6 域 80 + 红队 6）= 业务正确性标准；**数据集是标准**——改问题/SQL/data 都要逐条记变更清单（先例：`eval_results/round-manual/T6-changes.md`、`dataset-repair-20260920.md`），文本级替换保字节形态（CRLF/无 BOM）
 - `eval/judge.py` 纯函数判分（97 pytest）：多事件最佳匹配 / 拒答词表 / 采样录制前缀感知 / 列改名数值多重集兜底 / CTE 表名过滤——实弹校准出来的语义，改前先读测试
 - `run_agent_eval.py` live 驱动器（`EVAL_LIVE=1` 门禁防误烧 API；`--idx` 精确选场；`--fresh` 自动给 submission_id 加盐——网关幂等键不变会原样返回旧任务）；`eval/rejudge_round.py` 判分器校准后零成本复判录播
 
