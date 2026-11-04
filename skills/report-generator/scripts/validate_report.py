@@ -10,9 +10,13 @@
     2. 结构校验（手写校验器，规则同 references/report-schema.json）
     3. 黑名单：eval( / function( 旧函数串
     4. 占位符残留（HTML 输入）
-    5. 结构补充：chart 必须有 valueFormat、section id 唯一、>=1 chart section
-    6. 大小：单 chart 数据点 <= 200、HTML <= 5MB
-    7. 内联 JS 语法（node 存在则 --check，否则跳过）
+    5. 结构补充：chart 必须有 valueFormat、section id 唯一
+    6. scope 动态口径：label/value 非空字符串，拦截 SQL 片段/内部表名/凭据
+    7. 大小：单 chart 数据点 <= 200、HTML <= 5MB
+    8. 内联 JS 语法（node 存在则 --check，否则跳过）
+
+动态性说明: kpis/sections 可为空数组（按实际问题取舍，不凑模块）；
+图表 section 不强制存在（纯排名表/数据不足报告合法）。
 """
 import argparse
 import json
@@ -25,6 +29,14 @@ import tempfile
 
 VALUE_FORMAT_RE = re.compile(r"^(yi|wan|percent|signed_percent|sqm_wan|yuan|int)(:[0-9])?$")
 FUNC_BLACKLIST = re.compile(r"function\s*\(|\beval\s*\(")
+# scope 口径文本拦截：SQL 语句形态 / snake_case 内部表名字段名 / 凭据键值
+SCOPE_SQL_RE = re.compile(
+    r"(?is)\b(select\s+.{1,200}?\s+from|insert\s+into|delete\s+from|update\s+\S+\s+set"
+    r"|group\s+by|order\s+by|left\s+join|right\s+join|inner\s+join|full\s+join"
+    r"|where\s+\S+\s*(=|like|in|>)\b)\b")
+SCOPE_TECH_TOKEN_RE = re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b")
+SCOPE_CREDENTIAL_RE = re.compile(
+    r"(?i)(password|passwd|api[_-]?key|apikey|secret|token)\s*[=:：]\s*\S+|sk-[A-Za-z0-9]{16,}")
 PLACEHOLDERS = ("{{REPORT_JSON}}", "{{REPORT_TITLE}}", "{{REPORT_META}}", "{{ECHARTS_LIB}}")
 MAX_DATA_POINTS = 200
 HTML_SIZE_LIMIT = 5 * 1024 * 1024
@@ -49,9 +61,11 @@ def validate_data(data):
     if not str(data.get("insight") or "").strip():
         err("insight", "不能为空")
 
+    _validate_scope(data, err)
+
     kpis = data.get("kpis")
-    if not isinstance(kpis, list) or not kpis:
-        err("kpis", "必须是非空数组")
+    if not isinstance(kpis, list):
+        err("kpis", "必须是数组（无 KPI 时给空数组，不凑数）")
     else:
         for i, k in enumerate(kpis):
             if not isinstance(k, dict):
@@ -65,10 +79,9 @@ def validate_data(data):
                 err("kpis[%d].direction" % i, "非法值 %r，允许 up/down/neutral" % k["direction"])
 
     sections = data.get("sections")
-    chart_count = 0
     seen_ids = set()
-    if not isinstance(sections, list) or not sections:
-        err("sections", "必须是非空数组")
+    if not isinstance(sections, list):
+        err("sections", "必须是数组（无图表/明细内容时给空数组）")
         sections = []
     for i, s in enumerate(sections):
         p = "sections[%d]" % i
@@ -91,13 +104,9 @@ def validate_data(data):
             err(p + ".type", "非法值 %r，允许 chart-with-analysis/table" % stype)
             continue
         if stype == "chart-with-analysis":
-            chart_count += 1
             _validate_chart_section(s, p, err)
         else:
             _validate_table_section(s, p, err)
-
-    if sections and chart_count == 0:
-        err("sections", "至少需要 1 个 chart-with-analysis section")
 
     prov = data.get("provenance")
     if not isinstance(prov, dict):
@@ -108,6 +117,36 @@ def validate_data(data):
 
     _scan_blacklist(data, "$", errs)
     return errs
+
+
+def _validate_scope(data, err):
+    """scope：动态口径数组，可缺失/可为空数组。
+
+    条目 label/value 必须是非空字符串，且面向业务表达——
+    拦截 SQL 片段、内部表名/字段名（snake_case）、凭据类敏感信息。
+    不硬编码任何业务口径标签（label 由 AI 按问题自定）。"""
+    scope = data.get("scope")
+    if scope is None:
+        return
+    if not isinstance(scope, list):
+        err("scope", "必须是数组（label/value 口径条目）")
+        return
+    for i, item in enumerate(scope):
+        p = "scope[%d]" % i
+        if not isinstance(item, dict):
+            err(p, "必须是 object（含 label/value）")
+            continue
+        for f in ("label", "value"):
+            v = item.get(f)
+            if not isinstance(v, str) or not v.strip():
+                err("%s.%s" % (p, f), "必须是非空字符串（无意义的空条目不要写）")
+                continue
+            if SCOPE_SQL_RE.search(v):
+                err("%s.%s" % (p, f), "不得包含 SQL 片段（口径用业务语言描述）")
+            if SCOPE_TECH_TOKEN_RE.search(v):
+                err("%s.%s" % (p, f), "不得混入内部表名/字段名（snake_case 技术标识）")
+            if SCOPE_CREDENTIAL_RE.search(v):
+                err("%s.%s" % (p, f), "不得包含凭据等敏感信息")
 
 
 def _validate_chart_section(s, p, err):

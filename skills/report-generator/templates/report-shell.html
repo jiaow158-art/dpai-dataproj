@@ -11,7 +11,6 @@
     --bg-card-hover: #FAFAFA;
     --bg-insight: #F9FAFB;
     --bg-table-head: #F9FAFB;
-    --bg-provenance: #F9FAFB;
     --text-primary: #111827;
     --text-secondary: #4B5563;
     --text-muted: #9CA3AF;
@@ -83,6 +82,47 @@
   }
   .report-header .meta span { display: inline-flex; align-items: center; gap: 4px; }
   .report-header .meta .sep { width: 1px; height: 14px; background: var(--border); }
+
+  /* ---- Report Scope（统计口径，动态条目） ---- */
+  .report-scope {
+    background: var(--bg-insight);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 22px 18px;
+    margin-bottom: 24px;
+  }
+  .report-scope:empty { display: none; }
+  .report-scope .scope-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent-blue);
+    margin-bottom: 10px;
+  }
+  .report-scope .scope-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 8px 28px;
+  }
+  .report-scope .scope-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 13px;
+    min-width: 0;
+  }
+  .report-scope .scope-label {
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .report-scope .scope-value {
+    color: var(--text-secondary);
+    font-weight: 500;
+    word-break: break-word;
+    min-width: 0;
+  }
 
   /* ---- KPI Section ---- */
   .kpi-section {
@@ -329,72 +369,6 @@
   .page-btn:disabled { opacity: 0.3; cursor: default; }
   .page-info { font-size: 12px; color: var(--text-muted); margin: 0 8px; }
 
-  /* ---- Provenance Section ---- */
-  .provenance-section {
-    background: var(--bg-provenance);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-  }
-  .provenance-section:empty { display: none; }
-  .provenance-section .provenance-title {
-    font-size: 14px; font-weight: 600; color: var(--text-primary);
-    margin-bottom: 16px; padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  .provenance-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px 32px;
-    margin-bottom: 16px;
-  }
-  .provenance-grid .provenance-item {
-    display: flex; gap: 8px; font-size: 13px;
-  }
-  .provenance-grid .provenance-label {
-    color: var(--text-muted); white-space: nowrap; min-width: 80px;
-  }
-  .provenance-grid .provenance-value {
-    color: var(--text-secondary);
-  }
-  .provenance-sql {
-    background: #FFFFFF;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    margin-bottom: 16px;
-    font-family: "SF Mono", "Cascadia Code", "Menlo", "Consolas", monospace;
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 240px;
-    overflow-y: auto;
-    line-height: 1.6;
-  }
-  .provenance-sql:empty { display: none; }
-  .tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .tag-list:empty { display: none; }
-  .tag-list .tag {
-    display: inline-block;
-    background: rgba(37,99,235,0.08);
-    color: var(--accent-blue);
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    border: 1px solid rgba(37,99,235,0.15);
-  }
-  .tag-list .tag.warn {
-    background: rgba(220,38,38,0.06);
-    color: var(--color-up);
-    border-color: rgba(220,38,38,0.2);
-  }
-
   /* ---- Responsive ---- */
   @media (max-width: 768px) {
     .report { padding: 16px 12px 32px; }
@@ -405,7 +379,6 @@
     .chart-block.tall .chart-container, .chart-container { height: 300px; }
     .kpi-section { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
     .kpi-card .kpi-value { font-size: 22px; }
-    .provenance-grid { grid-template-columns: 1fr; }
     .tab-btn { padding: 10px 16px; font-size: 12px; }
   }
 
@@ -436,11 +409,11 @@
     <div class="meta">{{REPORT_META}}</div>
   </div>
 
-  <div class="kpi-section"></div>
+  <div class="report-scope"></div>
   <div class="insight-banner"></div>
+  <div class="kpi-section"></div>
   <div class="tab-nav"></div>
   <div class="tab-content-container"></div>
-  <div class="provenance-section"></div>
 
 </div>
 
@@ -542,6 +515,23 @@
 
   /* ---- Accent color rotation for KPI cards ---- */
   var accentColors = ['blue', 'purple', 'cyan', 'pink'];
+
+  /* ---- Render scope (统计口径，动态条目) ---- */
+  var scopeBar = document.querySelector('.report-scope');
+  if (data.scope && data.scope.length) {
+    var scopeHTML = '<div class="scope-title">统计口径</div><div class="scope-grid">';
+    data.scope.forEach(function(item) {
+      if (!item || !item.label || !item.value) return;
+      scopeHTML += '<div class="scope-item">'
+        + '<span class="scope-label">' + escapeHTML(String(item.label)) + '</span>'
+        + '<span class="scope-value">' + escapeHTML(String(item.value)) + '</span>'
+        + '</div>';
+    });
+    scopeHTML += '</div>';
+    scopeBar.innerHTML = scopeHTML;
+  } else {
+    scopeBar.style.display = 'none';
+  }
 
   /* ---- Render KPI cards ---- */
   var kpiSection = document.querySelector('.kpi-section');
@@ -922,56 +912,8 @@
     });
   }
 
-  /* ---- Render provenance section ---- */
-  var provSection = document.querySelector('.provenance-section');
-  if (data.provenance) {
-    var p = data.provenance;
-    var html = '<div class="provenance-title">数据来源与追溯</div>';
-
-    /* Key-value grid */
-    html += '<div class="provenance-grid">';
-    if (p.source) html += '<div class="provenance-item"><span class="provenance-label">数据来源</span><span class="provenance-value">' + escapeHTML(p.source) + '</span></div>';
-    if (p.lastUpdate) html += '<div class="provenance-item"><span class="provenance-label">最后更新</span><span class="provenance-value">' + escapeHTML(p.lastUpdate) + '</span></div>';
-    if (p.skillVersion) html += '<div class="provenance-item"><span class="provenance-label">Skill 版本</span><span class="provenance-value">' + escapeHTML(p.skillVersion) + '</span></div>';
-    if (p.table) html += '<div class="provenance-item"><span class="provenance-label">数据表</span><span class="provenance-value">' + escapeHTML(p.table) + '</span></div>';
-    html += '</div>';
-
-    /* SQL */
-    if (p.query || p.sql) {
-      html += '<div class="provenance-sql">' + escapeHTML(p.query || p.sql) + '</div>';
-    }
-
-    /* Filters as tags */
-    if (p.filters && p.filters.length) {
-      html += '<div class="tag-list">';
-      p.filters.forEach(function(f) {
-        html += '<span class="tag">' + escapeHTML(f) + '</span>';
-      });
-      html += '</div>';
-    }
-
-    /* Limitations as warning tags */
-    if (p.limitations && p.limitations.length) {
-      html += '<div class="tag-list" style="margin-top:8px;">';
-      p.limitations.forEach(function(l) {
-        html += '<span class="tag warn">限制: ' + escapeHTML(l) + '</span>';
-      });
-      html += '</div>';
-    }
-
-    /* Data quality as warning tags */
-    if (p.dataQuality && p.dataQuality.length) {
-      html += '<div class="tag-list" style="margin-top:8px;">';
-      p.dataQuality.forEach(function(d) {
-        html += '<span class="tag warn">数据质量: ' + escapeHTML(d) + '</span>';
-      });
-      html += '</div>';
-    }
-
-    provSection.innerHTML = html;
-  } else {
-    provSection.style.display = 'none';
-  }
+  /* provenance（审计数据）仍完整内嵌在 var data = ... 中，仅不再渲染可见面板。
+     影响经营判断的业务限制应写入 scope 或 analysis，而不是依赖技术追溯面板。 */
 
   window.__REPORT_VALID__ = true;
 

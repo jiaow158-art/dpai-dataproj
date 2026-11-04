@@ -215,3 +215,122 @@ def test_scatter_unnamed_array_points_pass():
     r["sections"][0]["chart"]["option"] = {
         "series": [{"name": "s", "type": "scatter", "data": [[1, 2], [3, 4]]}]}
     assert vr.validate_data(r) == []
+
+
+# ---------- v2.2 动态 scope + 模块可空 ----------
+
+def test_scope_valid_passes():
+    r = _base_report()
+    r["scope"] = [
+        {"label": "统计期间", "value": "2026年10月"},
+        {"label": "指标口径", "value": "含税达成额"},
+        {"label": "对比基准", "value": "2025年10月同期"},
+        {"label": "组织范围", "value": "瓷砖事业部（含下属分部）"},
+    ]
+    assert vr.validate_data(r) == []
+
+
+def test_scope_missing_and_empty_pass():
+    assert vr.validate_data(_base_report()) == []  # 缺失
+    r = _base_report()
+    r["scope"] = []
+    assert vr.validate_data(r) == []  # 空数组
+
+
+def test_scope_normal_business_terms_pass():
+    """校验器不得误拦正常业务术语。"""
+    r = _base_report()
+    r["scope"] = [
+        {"label": "库存金额", "value": "期末账面余额，含原材料、在产品、产成品"},
+        {"label": "应收账龄", "value": "逾期划分：1-30天 / 31-60天 / 61-90天 / 90天以上"},
+        {"label": "销售成本", "value": "不含税口径"},
+    ]
+    assert vr.validate_data(r) == []
+
+
+def test_scope_not_array_fails():
+    r = _base_report()
+    r["scope"] = {"label": "统计期间", "value": "2026年10月"}
+    errs = vr.validate_data(r)
+    assert any("[scope]" in e for e in errs), errs
+
+
+def test_scope_item_not_object_fails():
+    r = _base_report()
+    r["scope"] = ["统计期间: 2026年10月"]
+    errs = vr.validate_data(r)
+    assert any("scope[0]" in e for e in errs), errs
+
+
+def test_scope_empty_label_or_value_fails():
+    r = _base_report()
+    r["scope"] = [{"label": "  ", "value": "2026年10月"}]
+    assert any("scope[0].label" in e for e in vr.validate_data(r))
+    r = _base_report()
+    r["scope"] = [{"label": "统计期间", "value": ""}]
+    assert any("scope[0].value" in e for e in vr.validate_data(r))
+
+
+def test_scope_sql_fragment_fails():
+    r = _base_report()
+    r["scope"] = [{"label": "口径", "value": "SELECT amount FROM dm_sales WHERE org = '瓷砖'"}]
+    errs = vr.validate_data(r)
+    assert any("SQL" in e for e in errs), errs
+
+
+def test_scope_snake_case_table_fails():
+    r = _base_report()
+    r["scope"] = [{"label": "数据来源", "value": "取自 dm_rpt_sales_group_t"}]
+    errs = vr.validate_data(r)
+    assert any("snake_case" in e for e in errs), errs
+
+
+def test_scope_credential_fails():
+    r = _base_report()
+    r["scope"] = [{"label": "连接", "value": "password=DP_dws2026"}]
+    errs = vr.validate_data(r)
+    assert any("敏感" in e for e in errs), errs
+
+
+def test_empty_kpis_passes():
+    """简单排名类报告：无 KPI 不凑数。"""
+    r = _base_report()
+    r["kpis"] = []
+    assert vr.validate_data(r) == []
+
+
+def test_empty_sections_passes():
+    """数据不足类报告：无图表/明细 Tab 合法。"""
+    r = _base_report()
+    r["sections"] = []
+    assert vr.validate_data(r) == []
+
+
+def test_table_only_no_chart_passes():
+    """纯排名表报告（无图表 section）合法。"""
+    r = _base_report()
+    r["sections"] = [r["sections"][1]]
+    assert vr.validate_data(r) == []
+
+
+def test_kpis_not_list_still_fails():
+    r = _base_report()
+    r["kpis"] = "无"
+    assert any("kpis" in e for e in vr.validate_data(r))
+
+
+def test_sections_not_list_still_fails():
+    r = _base_report()
+    r["sections"] = {}
+    assert any("sections" in e for e in vr.validate_data(r))
+
+
+def test_scope_business_limitation_disclosure_passes():
+    """影响经营判断的业务限制可用 scope 条目披露（业务语言），校验器不得误拦。"""
+    r = _base_report()
+    r["scope"] = [
+        {"label": "数据完整性", "value": "经销渠道数据未接入，整体结论仅覆盖零售渠道"},
+        {"label": "对比基准", "value": "本期未做同比"},
+        {"label": "指标可比性", "value": "口径切换，与上期不可直接比较"},
+    ]
+    assert vr.validate_data(r) == []
