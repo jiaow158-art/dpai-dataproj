@@ -145,7 +145,7 @@
 |---|---|---|
 | 客户名称/分组/销售范围 | `dwrdim.dwr_dim_cust_general_d` / `dwr_dim_cust_sales_area_d2` | `customer = cust_num`（+salesorg+distr_chan，end_date='4712-12-31' AND del_flag='N'） |
 | 物料品类 | `dwimd.dwi_md_data_material_general_t` | `material = material_num` |
-| WBS 项目 | `sdi.sdi_proj_1001` | `substr(wbsid,1,10) = PSPID` |
+| WBS 项目 | `dwrdim.dwr_dim_wbs_basis_info_f`（WBS 层级+项目属性：项目类型/负责人/客户/销售组织/利润中心，134 万行） | `wbsid = wbs_level3`（实测近全命中，键近唯一不膨胀）；**勿用** `substr(wbsid,1,10) = wbs_top_level` —— 项目定义粒度 1:N 会膨胀 ~25 倍。原 `sdi.sdi_proj_1001` 在 DWS 不可访问，2026-11-13 实证替换 |
 | 组织树 | sources-of-truth org-hierarchy | 销售组织码挂 node 层级（同其他域） |
 
 ### 同域事实表与勾稽
