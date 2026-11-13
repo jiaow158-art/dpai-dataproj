@@ -9,10 +9,11 @@
       "ar",
       "sales-performance",
       "sku-profitability",
-      "otd-fulfillment"
+      "otd-fulfillment",
+      "points"
     ],
     "description": "Offline evaluation dataset for Skills accuracy tracking",
-    "total": 86,
+    "total": 93,
     "passed": 30,
     "failed": 0,
     "runner": "run_eval.py"
@@ -3936,6 +3937,379 @@
         }
       ],
       "checksum": "rows=36"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_balance",
+      "question": "客户编码1000014139截至2026年9月末累计积分余额多少",
+      "sql": "SELECT customer, ROUND(SUM(pointsvalue),2) AS balance FROM dwrfin.dwr_gl_pointsdetail_f WHERE customer='1000014139' AND calmonth<='2026-09' GROUP BY customer",
+      "row_count": 1,
+      "elapsed_ms": 384,
+      "data": [
+        {
+          "customer": "1000014139",
+          "balance": 12082263.92
+        }
+      ],
+      "checksum": "rows=1"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_structure",
+      "question": "2026年9月按积分类型的积分发生额有多少",
+      "sql": "SELECT zjflx, zjfms, COUNT(*) AS cnt, ROUND(SUM(pointsvalue),2) AS sum_pv FROM dwrfin.dwr_gl_pointsdetail_f WHERE calmonth='2026-09' GROUP BY 1,2 ORDER BY sum_pv DESC",
+      "row_count": 16,
+      "elapsed_ms": 208,
+      "data": [
+        {
+          "zjflx": "01",
+          "zjfms": "月度积分",
+          "cnt": 66691,
+          "sum_pv": 5519675.04
+        },
+        {
+          "zjflx": "09",
+          "zjfms": "广告积分-大区",
+          "cnt": 30100,
+          "sum_pv": 2167298.87
+        },
+        {
+          "zjflx": "08",
+          "zjfms": "广告积分-区域",
+          "cnt": 78081,
+          "sum_pv": 1610711.32
+        },
+        {
+          "zjflx": "03",
+          "zjfms": "年度积分",
+          "cnt": 34942,
+          "sum_pv": 1167449.52
+        },
+        {
+          "zjflx": "10",
+          "zjfms": "冻结/解冻积分",
+          "cnt": 73,
+          "sum_pv": 833867.53
+        },
+        {
+          "zjflx": "04",
+          "zjfms": "高端积分",
+          "cnt": 67015,
+          "sum_pv": 815997.68
+        },
+        {
+          "zjflx": "02",
+          "zjfms": "季度积分",
+          "cnt": 39406,
+          "sum_pv": 644705.86
+        },
+        {
+          "zjflx": "05",
+          "zjfms": "装修积分",
+          "cnt": 18636,
+          "sum_pv": 88603.72
+        },
+        {
+          "zjflx": "06",
+          "zjfms": "宣传积分",
+          "cnt": 6,
+          "sum_pv": 53.83
+        },
+        {
+          "zjflx": null,
+          "zjfms": null,
+          "cnt": 3540,
+          "sum_pv": -135236.66
+        },
+        {
+          "zjflx": "14",
+          "zjfms": "应退信贷",
+          "cnt": 825,
+          "sum_pv": -333235.19
+        },
+        {
+          "zjflx": "12",
+          "zjfms": "代收代垫款",
+          "cnt": 7780,
+          "sum_pv": -507325.6
+        },
+        {
+          "zjflx": "07",
+          "zjfms": "广告积分-经销",
+          "cnt": 32453,
+          "sum_pv": -575386.99
+        },
+        {
+          "zjflx": "13",
+          "zjfms": "工程积分",
+          "cnt": 1792,
+          "sum_pv": -1003053.44
+        },
+        {
+          "zjflx": "00",
+          "zjfms": "常规积分",
+          "cnt": 20076,
+          "sum_pv": -5567252.17
+        },
+        {
+          "zjflx": "11",
+          "zjfms": "应退客户款",
+          "cnt": 5635,
+          "sum_pv": -14245093.56
+        }
+      ],
+      "checksum": "rows=16"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_usage_audit",
+      "question": "2026年三季度使用积分及政策内外报销金额",
+      "sql": "SELECT score_classification, COUNT(*) AS cnt, ROUND(SUM(pointsvalue),2) AS sum_pv FROM dwrfin.dwr_gl_pointsdetail_f WHERE calmonth BETWEEN '2026-07' AND '2026-09' GROUP BY 1 ORDER BY cnt DESC",
+      "row_count": 4,
+      "elapsed_ms": 552,
+      "data": [
+        {
+          "score_classification": null,
+          "cnt": 1150988,
+          "sum_pv": -29690913.82
+        },
+        {
+          "score_classification": "使用积分",
+          "cnt": 80247,
+          "sum_pv": -80842820.18
+        },
+        {
+          "score_classification": "政策外",
+          "cnt": 6642,
+          "sum_pv": 854303.11
+        },
+        {
+          "score_classification": "政策内",
+          "cnt": 6496,
+          "sum_pv": 78842478.43
+        }
+      ],
+      "checksum": "rows=4"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_trend",
+      "question": "2026年1-9月各月积分净发生额趋势",
+      "sql": "SELECT calmonth, ROUND(SUM(pointsvalue),2) AS net_pv FROM dwrfin.dwr_gl_pointsdetail_f WHERE calmonth BETWEEN '2026-01' AND '2026-09' GROUP BY 1 ORDER BY 1",
+      "row_count": 9,
+      "elapsed_ms": 582,
+      "data": [
+        {
+          "calmonth": "2026-01",
+          "net_pv": -23370763.5
+        },
+        {
+          "calmonth": "2026-02",
+          "net_pv": -6432729.99
+        },
+        {
+          "calmonth": "2026-03",
+          "net_pv": -13494866.94
+        },
+        {
+          "calmonth": "2026-04",
+          "net_pv": -5540531.67
+        },
+        {
+          "calmonth": "2026-05",
+          "net_pv": -7096450.25
+        },
+        {
+          "calmonth": "2026-06",
+          "net_pv": 2562371.7
+        },
+        {
+          "calmonth": "2026-07",
+          "net_pv": -9836464.04
+        },
+        {
+          "calmonth": "2026-08",
+          "net_pv": -11482268.17
+        },
+        {
+          "calmonth": "2026-09",
+          "net_pv": -9518220.25
+        }
+      ],
+      "checksum": "rows=9"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_drilldown",
+      "question": "开票抬头9006548888对应的积分明细",
+      "sql": "SELECT calmonth, zjfggbh, zjfggit, zjfms, zjfbglxms, pointsvalue, vbeln, wbsid FROM dwrfin.dwr_gl_pointsdetail_f WHERE vbeln_vf='9006548888' ORDER BY calmonth, zjfggbh, zjfggit",
+      "row_count": 7,
+      "elapsed_ms": 715,
+      "data": [
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  1",
+          "zjfms": "常规积分",
+          "zjfbglxms": "销售使用积分",
+          "pointsvalue": -543.94,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  2",
+          "zjfms": "年度积分",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 11.29,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  3",
+          "zjfms": "高端积分",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 22.58,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  4",
+          "zjfms": "装修积分",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 5.65,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  5",
+          "zjfms": "广告积分-经销",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 11.29,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  6",
+          "zjfms": "广告积分-区域",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 50.81,
+          "vbeln": "1114869436",
+          "wbsid": null
+        },
+        {
+          "calmonth": "2026-09",
+          "zjfggbh": "2000075442",
+          "zjfggit": "  7",
+          "zjfms": "广告积分-大区",
+          "zjfbglxms": "系统计提积分",
+          "pointsvalue": 59.39,
+          "vbeln": "1114869436",
+          "wbsid": null
+        }
+      ],
+      "checksum": "rows=7"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_recon",
+      "question": "2026年1-9月已清账与未清账积分分布",
+      "sql": "SELECT CASE WHEN reconciliationflag='A' THEN '已清账' ELSE '未清账' END AS recon_status, COUNT(*) AS cnt, ROUND(SUM(pointsvalue),2) AS sum_pv FROM dwrfin.dwr_gl_pointsdetail_f WHERE calmonth BETWEEN '2026-01' AND '2026-09' GROUP BY 1 ORDER BY cnt DESC",
+      "row_count": 2,
+      "elapsed_ms": 624,
+      "data": [
+        {
+          "recon_status": "未清账",
+          "cnt": 3299169,
+          "sum_pv": -49383598.68
+        },
+        {
+          "recon_status": "已清账",
+          "cnt": 3343,
+          "sum_pv": -34826324.44
+        }
+      ],
+      "checksum": "rows=2"
+    },
+    {
+      "domain": "points",
+      "pattern": "points_listed",
+      "question": "2026年9月上市口径的积分三指标前十销售组",
+      "sql": "SELECT jf.sales_group_code_wbs AS sales_grp, ROUND(SUM(CASE WHEN jf.score_classification='使用积分' THEN -COALESCE(jf.pointsvalue,0) ELSE 0 END),2) AS usage_pts, ROUND(SUM(CASE WHEN jf.score_classification='政策内' THEN COALESCE(jf.pointsvalue,0) ELSE 0 END),2) AS reimb_in, ROUND(SUM(CASE WHEN jf.score_classification='政策外' THEN COALESCE(jf.pointsvalue,0) ELSE 0 END),2) AS reimb_out FROM dwrfin.dwr_gl_pointsdetail_f jf LEFT JOIN dwrdim.dwr_dim_cust_sales_area_d2 l ON jf.customer=l.cust_num AND jf.distr_chan=l.distribution_chnl_code AND jf.salesorg=l.sales_org_code AND l.end_date='4712-12-31' AND l.del_flag='N' WHERE jf.comp_code<>'Z000' AND (l.cust_group_code<>'Z0' OR l.cust_group_code IS NULL) AND jf.calmonth='2026-09' GROUP BY 1 ORDER BY usage_pts DESC LIMIT 10",
+      "row_count": 10,
+      "elapsed_ms": 517,
+      "data": [
+        {
+          "sales_grp": "ZV9",
+          "usage_pts": 1267285.06,
+          "reimb_in": 118001.37,
+          "reimb_out": 508.88
+        },
+        {
+          "sales_grp": "ZFK",
+          "usage_pts": 521388.79,
+          "reimb_in": 246978.06,
+          "reimb_out": -2100.0
+        },
+        {
+          "sales_grp": "C21",
+          "usage_pts": 503708.92,
+          "reimb_in": 579855.67,
+          "reimb_out": -7451.0
+        },
+        {
+          "sales_grp": "S05",
+          "usage_pts": 502627.89,
+          "reimb_in": 503348.34,
+          "reimb_out": -9606.1
+        },
+        {
+          "sales_grp": "ZQF",
+          "usage_pts": 483900.9,
+          "reimb_in": 2122.28,
+          "reimb_out": -4050.0
+        },
+        {
+          "sales_grp": "ZU8",
+          "usage_pts": 481557.41,
+          "reimb_in": 317387.02,
+          "reimb_out": -52011.35
+        },
+        {
+          "sales_grp": "P26",
+          "usage_pts": 433731.94,
+          "reimb_in": 99093.11,
+          "reimb_out": -698.61
+        },
+        {
+          "sales_grp": "ZAZ",
+          "usage_pts": 424941.94,
+          "reimb_in": 21807.61,
+          "reimb_out": -2025.0
+        },
+        {
+          "sales_grp": "ZW2",
+          "usage_pts": 372336.66,
+          "reimb_in": 152142.41,
+          "reimb_out": 0.0
+        },
+        {
+          "sales_grp": "ZQC",
+          "usage_pts": 332678.32,
+          "reimb_in": 332395.38,
+          "reimb_out": 0.0
+        }
+      ],
+      "checksum": "rows=10"
     }
   ]
 }
