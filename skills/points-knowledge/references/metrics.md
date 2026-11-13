@@ -13,7 +13,7 @@
 | "**冲销**记录" | `offset_mark='X'` | `offset_mark` |
 | "某**发票/订单/WBS** 的积分明细" | 凭证级下钻：`vbeln_vf` / `vbeln` / `wbsid` | 单据字段族 |
 | "积分**趋势**（月度）" | 按 calmonth 分组的净发生额 SUM(pointsvalue)，或计提/使用分开 | `calmonth` |
-| "**上市口径**的积分（进利润表的）" | `comp_code<>'Z000'` + JOIN 客户销售范围维表滤 `cust_group<>'Z0'`，再按 score_classification 切分（下游利润汇总的原始逻辑） | 见第四节公式 |
+| "**上市口径**的积分（进利润表的）" | `comp_code<>'Z000'` + JOIN 客户销售范围维表滤 `cust_group_code<>'Z0'`，再按 score_classification 切分（下游利润汇总的原始逻辑） | 见第四节公式 |
 | "使用积分/预提积分**对业绩利润的影响**" | **跨域**：业绩口径聚合（`zsyjf`/`zytjf`）走 sales-performance 域 mix/ambv2 表；本表只答凭证明细与对账 | 跨域指针见 data-lineage.md |
 
 ## 二、核心口径公式
@@ -65,7 +65,7 @@ WHERE jf.comp_code <> 'Z000'
 GROUP BY 1,2,3
 ```
 
-问"上市口径/进利润表的积分"时**必须**带 `comp_code<>'Z000'` 与 cust_group 过滤，否则与利润表对不上。
+问"上市口径/进利润表的积分"时**必须**带 `comp_code<>'Z000'` 与 cust_group_code 过滤，否则与利润表对不上。
 
 ## 五、pattern → 首选表与字段路由
 
@@ -90,9 +90,10 @@ GROUP BY 1,2,3
 3. **全表只有 pointsvalue 是 numeric**：kwmeng/orderarea/netprice2 均 varchar，聚合前 CAST，否则报错或静默串接。
 4. **zjflx/zjfbglx 有 NULL**（月均 3~4 千行，SAP调整值分支）：GROUP BY 会单列一行 NULL，呈现时合并为「未分类」并声明。
 5. **infoprov 约半数为 NULL，且 NULL 有明确结构**（实测）：2024-01 前历史段 1,520.5 万行一次性装载、全 NULL（calmonth ≤2023-12）；2024-01 起增量才有来源标记。按来源切分只对 2024-01 后有意义，且不能作唯一过滤条件。
-6. **comp_code='Z000' 跨公司调整行**：问总量未必须排除，**问上市口径必须排除**（第四节）；客户分组 `cust_group='Z0'` 同理。
+6. **comp_code='Z000' 跨公司调整行**：问总量未必须排除，**问上市口径必须排除**（第四节）；客户分组 `cust_group_code='Z0'` 同理。
 7. **del_flag 有 NULL**（SAP调整值分支约 1.5 万行）：`del_flag='N'` 会漏；默认不过滤该字段。
 8. **备份变体表 4 张禁用**（`_wjh/_t/_qyj` 等后缀）。
 9. **calmonth 脏值 `0000-00`** 仅 1 行：字符串区间过滤天然排除，无需特判。
 10. **大表红线**：2,968 万行，任何查询必带时间过滤或单据号等值条件。
 11. **空串即 NULL（DWS Oracle 兼容语义）**：`wbsid <> ''` 之类空串比较恒为假（'' 按 NULL 处理），判非空一律 `IS NOT NULL`；`NULLIF(col,'')` 同理无效。实测 2026-09：`wbsid <> ''` 过滤 0 行，`wbsid IS NOT NULL` 得 7,648 行。
+12. **禁止无过滤 COUNT/全表探索**：积分主表 COUNT 必须带 `calmonth`/`budat`/`period_id_m` 或单据号（`vbeln`/`vbeln_vf`/`zjfggbh`）；Guard/MCP 会直接拒绝无过滤 COUNT。

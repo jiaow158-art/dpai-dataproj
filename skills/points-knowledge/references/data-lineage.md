@@ -34,7 +34,7 @@ SAP 调整值数据（预提积分≠0）dwr_sap_adjust_data_t ─────�
 detail.customer = dwr_dim_cust_general_d.cust_num（客户名/母客户，end_date='4712-12-31'）
 detail.customer + salesorg + distr_chan = dwr_dim_cust_sales_area_d2（客户分组/销售范围）
 detail.material = dwi_md_data_material_general_t.material_num（品类）
-detail.wbsid = dwr_dim_wbs_basis_info_f.wbs_level3（WBS 项目属性；sdi_proj_1001 在 DWS 不可访问，2026-11-13 实证替换）
+detail.wbsid = dwr_dim_wbs_basis_info_f.wbs_level3（WBS 项目属性；sdi schema 在 DWS 不存在，原 sdi_proj_1001 不可用，2026-11-13 实证替换）
 ```
 
 组织树挂接（销售组织/事业部维度）同其他域：见 `../../sources-of-truth/business-context/org-hierarchy.md`。

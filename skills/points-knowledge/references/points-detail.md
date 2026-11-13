@@ -145,7 +145,7 @@
 |---|---|---|
 | 客户名称/分组/销售范围 | `dwrdim.dwr_dim_cust_general_d` / `dwr_dim_cust_sales_area_d2` | `customer = cust_num`（+salesorg+distr_chan，end_date='4712-12-31' AND del_flag='N'） |
 | 物料品类 | `dwimd.dwi_md_data_material_general_t` | `material = material_num` |
-| WBS 项目 | `dwrdim.dwr_dim_wbs_basis_info_f`（WBS 层级+项目属性：项目类型/负责人/客户/销售组织/利润中心，134 万行） | `wbsid = wbs_level3`（实测近全命中，键近唯一不膨胀）；**勿用** `substr(wbsid,1,10) = wbs_top_level` —— 项目定义粒度 1:N 会膨胀 ~25 倍。原 `sdi.sdi_proj_1001` 在 DWS 不可访问，2026-11-13 实证替换 |
+| WBS 项目 | `dwrdim.dwr_dim_wbs_basis_info_f`（WBS 层级+项目属性：项目类型/负责人/客户/销售组织/利润中心，134 万行） | `wbsid = wbs_level3`（2026-09 键命中 2,845/3,030 = 93.9%，行数不膨胀；`wbs_level3` 近唯一）；**勿用** `substr(wbsid,1,10) = wbs_top_level` —— 项目定义粒度 1:N 实测膨胀 60.9 倍（465,604/7,648 行）。原 `sdi.sdi_proj_1001` 因 sdi schema 在 DWS 不存在而不可用，2026-11-13 实证替换 |
 | 组织树 | sources-of-truth org-hierarchy | 销售组织码挂 node 层级（同其他域） |
 
 ### 同域事实表与勾稽
@@ -158,3 +158,10 @@
 | `dwrfin.dwrfin_cost_sales_gross_profit_d`（292 万行，列存） | 利润日表（**不直接读本表**） | `use_point`/`accrual_point_system`/`accrual_point_manual`/`budget_use_point`/`budget_accrual_point`/`last_year_use_point` 等积分指标列的 ETL 取数源是 `DM_ZZT_XSSR_T` 与 `DM_RPT_GROUP_ACHIEVEMENT_AMB_T`（业绩/达成表族），与本表是**同业务不同链路**——不可拿本表直接对其对账（间接勾稽关系待确认） |
 
 > **装载结构（infoprov 时间分布实测 2026-11-12）**：主表 2024-01 起由凭证三表 UNION 增量装载（INVOICE_CONDITIONAL 1,379 万行 / ZJFTAB2 54.6 万 / Accounting 12.0 万 / SAP调整值 1.5 万，calmonth 均 ≥2023-12）；**2024-01 之前的 1,520.5 万行历史段为一次性装载、infoprov 全 NULL**（max calmonth=2023-12）——主表 2,967.6 万 vs 凭证三表合计约 1,308 万的差额由此而来，并非数据缺失。cre 流水 2,975.4 万比主表**多** 7.8 万行（部分分支未入主表），跨表对账时必须先区分装载段（2024-01 前 cre/历史段 ↔ 之后凭证增量段）。
+
+## 敏感列红线（2026-11-13 DWS 实测）
+
+- `dwr_dim_cust_general_d`：`phone_1`/`phone_2`/`legal_person_name`/`address_name`/`payer`/`ctr_object_person_name`
+- `dwr_dim_cust_sales_area_d2`：`ctr_object_person_name`
+- `dwr_dim_wbs_basis_info_f`：`sales_emp_name`（实测 644 个员工姓名）、`lifnr_name`（232 个供应商名）；`owner` 当前仅 1 个值、`owner_desc` 全空
+- 积分问题禁止 `SELECT *`；只取业务必要的客户编码/名称/分组与 WBS 项目属性，非必要不输出个人姓名/联系方式。
