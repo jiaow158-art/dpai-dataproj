@@ -223,6 +223,18 @@ DM.DM_SW_BUSINESS_CENTER_ACHIEVEMENT_DAILY_T
   ← 仅卫浴事业部, H03230613组织节点下
 ```
 
+### DM_OPERAT_PROFIT_STATEMENT_T (利润表平铺底表)
+
+```
+DM.DM_OPERAT_PROFIT_STATEMENT_T (~81万行, 粒度: 月×flag比较期×data_source×node_name9销售组单元)
+  ← DM.DM_FI_AMBV2_PROFIT_SUM_T (阿米巴利润汇总, 集团口径 data_source IN ('S','T'))
+       LEFT JOIN DM.DM_RPT_SALES_GROUP_T ON sales_grp = node_name9 (剔除 node_name2='R91000002' 过渡部门)
+  ← 预算/预测系: 预算底表 + 资金预算 + 合并明细和汇总预测底表 (ETL 2026-03-04 起)
+  ← 营业利润/阿米巴利润总额/资金成本合计(平台丽适节点置0)/对外分成毛利额合计 在 ETL 内算好落表
+  ← 月级 DELETE+INSERT, 每日跑当月与6天前所在月
+  ⚠️ 单位万元; 收入族在 S/T/D/U 行、费用族在 NULL 合并行 (详见 [operat-profit-statement.md](operat-profit-statement.md))
+```
+
 ## 表关联关系
 
 ### 最常用 JOIN 链路

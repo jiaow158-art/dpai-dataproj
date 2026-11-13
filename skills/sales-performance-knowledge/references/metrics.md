@@ -150,7 +150,8 @@ dm_fin_operations_mix_sum_t  毛利以上表        903万行  ★ 主事实表�
 ├── 需要"同比增长"？
 │   └── ct_sales_performance_t（唯一有 last_year_* 字段，需 JOIN 组织表）
 ├── 需要"预算/预测"对比？
-│   └── dm_fin_operations_mix_sum_t（有 _ys / _yc 后缀字段）
+│   ├── 利润表指标（营业利润/费用构成/阿米巴利润总额）→ dm_operat_profit_statement_t（flag 选预算/预测族，详见 [operat-profit-statement.md](operat-profit-statement.md)）
+│   └── 业绩/收入/毛利指标 → dm_fin_operations_mix_sum_t（有 _ys / _yc 后缀字段）
 ├── 需要"产品分类"下钻（高值/大规格/套餐/旗舰/IW/辅材等12种）？
 │   └── ct_sales_performance_t（222列预计算产品分类，判定规则详见「二-C」）
 ├── 需要"单据/发票/财务凭证号"追溯？
@@ -162,8 +163,10 @@ dm_fin_operations_mix_sum_t  毛利以上表        903万行  ★ 主事实表�
 │   └── dm_fin_operations_mix_t（mix_sum 的 GROUP BY 里没有这些）
 ├── 需要收入成本明细、毛利三口径（阿米巴/实际成本/标A）、1+N/跨事业部分成、内部结算价、周期价？
 │   └── dm_ambv2_profit_t（4600~5100万行明细底表，`data_source` 按指标族判定，组织用 `sales_division_1n_code`，另注意 `bus_area` 与国补改判 T，详见 [ambv2-profit.md](ambv2-profit.md)）
-├── 问"上市口径利润表" / "卫浴阿米巴利润表"（汇总层已有）？
-│   └── dm_fi_ambv2_profit_sum_listed_t / dm_sw_fi_ambv2_profit_sum_t（不要扫 5000 万行底表，详见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」）
+├── 问利润表下半段（组织×月）：费用构成、税金及附加、减值、营业利润、阿米巴利润总额？
+│   └── dm_operat_profit_statement_t（利润表平铺底表，单位万元，收入族/费用族分 data_source 行，详见 [operat-profit-statement.md](operat-profit-statement.md)）
+├── 用户明确点名"上市口径"？
+│   └── 仅此时走 dm_fi_ambv2_profit_sum_listed_t；明确点名"卫浴阿米巴利润表"才走 dm_sw_fi_ambv2_profit_sum_t（不要扫 5000 万行底表，详见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」）。**默认不走上市口径**——未点名口径的利润/损益问题禁止路由到这两张表
 ├── 其余所有场景（达成率/趋势/渠道/组织/客户/物料/品牌/区域下钻/面积）？
 │   └── dm_fin_operations_mix_sum_t（内置 node_desc + calmonth，写法最简单）
 └── 不确定？
@@ -653,6 +656,8 @@ GROUP BY org_code;
 | 使用积分 | **`0 − SUM(zsyjf)`（负值）** | 不是 `ABS(zsyjf)`（ABS 仅在 ct 表预计算分类的 ETL 判定中用，见二-C 差异场景注） |
 | 预提积分 | `SUM(zytjf)` | 正常正值 |
 
+> 🔀 **跨域**：本节是**业绩口径聚合值**。客户/凭证级积分台账问题（余额、明细、计提/使用流水、清账、冲销、政策内外、上市口径三指标对账）走 **points 域**（`points-knowledge`，主表 `dwrfin.dwr_gl_pointsdetail_f`）——该表是上市口径利润汇总的直接上游，两口径对账公式见 points 域 metrics.md。
+
 ### 偏差率族（集团经营分析报表独有，归因/对比类问题标准口径）
 
 每个指标可算 4 类对照：**本期实际 / 同比值（start−100）/ 环比值（−1个月）/ 预算值（`_ys` 后缀）**；对比层级可对"上层运营单位"（`orgup = LEFT(org1,9) + (RIGHT(org1,1) − 1)`）算同比/环比/预算偏差率。"指标与上层运营单位对比（同比偏差率）" = (实际值 − 同期值) − 上层运营单位同比偏差率。
@@ -752,7 +757,8 @@ WHERE stat_year = '2026' AND stat_month = '2026-05'
 | high_value_analysis（高值产品按渠道达成） | dm.ct_sales_performance_t | `SUM(high_value_month_achievement)` BY `integrate_channel_code`，calday 月末 | 不加组织过滤 | 预计算产品分类仅业绩表有（判定规则见二-C） |
 | cost_margin_trend（成本与毛利趋势） | dm.dm_fin_operations_mix_sum_t | `actual_cost_exclude_logistics`（业务标准成本）+ `gross_profit_after_sharing`（分成后毛利**金额**）；毛利率**分母一律 `notax_sales_net_amt`**、分子三套（阿米巴/标A/整体，默认阿米巴，见四-B；2026-11-02 业务口径裁定，÷ambperformance 作废） | node_desc2 + data_source | 业务确认成本口径仅 mix 有（见一.1） |
 | revenue_cost_detail（收入成本明细：单据/凭证/批次/SKU级、毛利三口径、分成、内部结算价） | dm.dm_ambv2_profit_t | `SUM(notax_sales_net_amt)`/`SUM(act_cost_sum_amt)`/毛利按口径选 `amb_profit_amt`/`act_cost_profit_amt`/`a_overall_profit_amt`；data_source **按口径选**：总额类 `'S'` / 集团利润表 `IN ('S','T')` / 分成按 卖出方(S)·供货方(D)·内部(U)；时间只用 calmonth；合并抵销加 `cust_group <> 'Z0'` + `node_name2 <> 'R91000002'` + `bus_area NOT IN ('G000','G001')` | `sales_division_1n_code='11000001'` 等值（**无 node_desc**） | 明细底表，Mix 的成本/毛利字段源自此表；常规月度序列仍走 mix（见 [ambv2-profit.md](ambv2-profit.md)） |
-| listed_profit / sw_amb_profit（上市口径利润表、卫浴阿米巴利润表） | `dm_fi_ambv2_profit_sum_listed_t` / `dm_sw_fi_ambv2_profit_sum_t` | 汇总层已有，直接取 | 按各汇总表自身组织字段 | **不要扫 5000 万行底表**；汇总表家族见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」 |
+| listed_profit / sw_amb_profit（上市口径利润表、卫浴阿米巴利润表） | `dm_fi_ambv2_profit_sum_listed_t` / `dm_sw_fi_ambv2_profit_sum_t` | 汇总层已有，直接取 | 按各汇总表自身组织字段 | **不要扫 5000 万行底表**；**仅当用户明确点名上市口径才用，默认不走**；汇总表家族见 [ambv2-profit.md](ambv2-profit.md)「下游表路由」 |
+| profit_pnl（利润表费用结构/营业利润/阿米巴利润总额，含利润预算预测对比） | `dm.dm_operat_profit_statement_t` | flag 选族（当期/累计=实际，*预算/*预测）；收入族字段在 S/T/D/U 行，费用族在 NULL 合并行 | `node_name9`(编码) JOIN `dm_rpt_sales_group_t` 取 `node_desc2`（事业部名）聚合 | 单位**万元**；单行不是完整损益；备份变体 6 张勿用，详见 [operat-profit-statement.md](operat-profit-statement.md) |
 
 **idx 30（org_monthly_achievement，「2026年1-6月卫浴事业部业绩情况」）失败教训 → 规则（2026-09-20 直连实测）**
 

@@ -27,6 +27,7 @@ description: 销售业绩领域数据知识库。当用户询问销售达成率�
 | [sales-target.md](references/sales-target.md) | 目标销售额、目标完成进度、目标vs实际偏差 |
 | [dm-so-org-perf-stat.md](references/dm-so-org-perf-stat.md) | **轻量汇总表**（业绩宽表上游）。阿米巴业绩+利润合并、毛利计算、费用明细 |
 | [ambv2-profit.md](references/ambv2-profit.md) | **收入成本底表**（4600~5100万行明细，列存）。单据/凭证/SKU级收入成本毛利下钻、毛利三口径、1+N/跨事业部分成、内部结算价。⚠️ 无 node_desc，组织用 `sales_division_1n_code`；`data_source` **按指标族判定**（总额取 S；分成 S=卖出方/D=供货方；集团利润表口径 `IN ('S','T')`，上市口径不过滤）；`bus_area` 影响成本调整值是否计入；问"上市口径/卫浴阿米巴利润"改走下游汇总表 |
+| [operat-profit-statement.md](references/operat-profit-statement.md) | **利润表平铺底表**（81万行）。组织×月的利润表下半段：费用构成→营业利润→阿米巴利润总额 + 利润预算/预测对比。⚠️ 单位万元；`node_name9` 是编码需 JOIN 组织树取名称；收入族在 S/T/D/U 行、费用族在 NULL 合并行，单行不是完整损益 |
 | [ct-dept-sales-performance.md](references/ct-dept-sales-performance.md) | **瓷砖部门业绩日报**（58列）。6级组织×4渠道, 含715/超大板/918/高值产品分类, 6种排名 |
 | [region-performance-daily.md](references/region-performance-daily.md) | **区域业绩日报**（25列）。部门日报简化版, 含季/年目标 |
 | [sw-business-center-daily.md](references/sw-business-center-daily.md) | **卫浴商用中心双计业绩**（13列）。大区×业务类型(直营KA/工程经销商/运营中心) |
